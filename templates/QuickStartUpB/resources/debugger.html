@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Debugger</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body class="bg-black text-white font-mono text-xs m-5">
+    <div id="json-container"></div>
+    <script>
+      // Our placeholder:
+      const jsonData = {{DATA_TO_DEBUG}};
+
+      const jsonContainer = document.getElementById("json-container");
+
+      // Loop through each JSON item and display it
+      jsonData.forEach(item => {
+        const jsonBox = document.createElement('pre');
+        jsonBox.className = 'bg-[#1e1e1e] text-[#dcdcdc] p-[10px] mb-[10px] rounded-[5px] overflow-auto whitespace-pre-wrap break-words';
+        jsonBox.textContent = JSON.stringify(item, null, 2);
+        jsonContainer.appendChild(jsonBox);
+      });
+    </script>
+  </body>
+</html>

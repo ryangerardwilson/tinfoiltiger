@@ -1,0 +1,6 @@
+resolver: lts-20.10
+packages:
+- .
+
+local-bin-path: .
+
