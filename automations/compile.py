@@ -80,16 +80,10 @@ def gather_files_from_src(src_dir):
 
 def generate_templates_hs_module(file_paths, output_path, project_name):
     """
-    Given a list of file paths (relative to some base such as "src_project/"),
-    generate a Haskell module called Templates (in a project-specific namespace)
-    that declares variables for each file using file embedding.
-
     file_paths: a list of tuples. Each tuple can have either:
        (path, comment) or (path, comment, file_content)
-    This function will use the first element (the file path) and the second element as a comment.
-
-    output_path: the file system path where the Templates.hs file should be written.
-    project_name: the project name to use as module name prefix (e.g. "QuickStartUpA").
+    output_path: where to write the Templates.hs file.
+    project_name: project name, used for naming the module and constructing embed paths.
     """
 
     def to_camel(s, capitalize_first=True):
@@ -104,11 +98,11 @@ def generate_templates_hs_module(file_paths, output_path, project_name):
 
     def build_variable_name(root_relative_path):
         """
-        Given a path relative to your resource base, build a Haskell variable name.
-        Example rules:
-          - "main.ml" → "fileMainExtMl"
-          - ".env" → "extEnv"
-          - "dbs/logs/schema.sql" → "dbsLogsSchema"
+        Build a Haskell variable name from a file path.
+        Examples:
+          "main.ml" → "fileMainExtMl"
+          ".env" → "extEnv"
+          "dbs/logs/schema.sql" → "dbsLogsSchema"
         """
         parts = root_relative_path.split(os.sep)
         if len(parts) == 1:
@@ -134,39 +128,60 @@ def generate_templates_hs_module(file_paths, output_path, project_name):
             else:
                 if '.' in filename:
                     name, ext = filename.rsplit('.', 1)
-                    # For subdirectory files, we omit the extension.
+                    # For subdirectory files, we omit the extension for the variable name.
                     return dir_part + to_camel(name)
                 else:
                     return dir_part + to_camel(filename)
 
-    # Create a module header using the project name.
+    """
+    templates_lines = []
+    for rel_path, var_name, _ in gathered_files:
+        templates_lines.append(f'  ("{rel_path}", {var_name})')
+    templates_list = ("templates :: [(FilePath, BS.ByteString)]\n"
+                      "templates =\n  [\n" +
+                      ",\n".join(templates_lines) +
+                      "\n  ]\n\n")
+    """
+
+    # Create the module header.
     header = (
         "{-# LANGUAGE TemplateHaskell #-}\n"
         "{-# LANGUAGE CPP #-}\n"
         f"module {project_name}.Templates\n"
-        "  ( "  # we could list exports here
+        "  ( "    # export list; we will list the individual variables and aggregated templates value.
     )
-    # Collect all variable names for the export list.
+
+    # Lists to hold variable names and also the aggregated tuples.
     var_names = []
+    aggregated_tuples = []
     embed_lines = []
+
     for entry in file_paths:
-        # Depending on tuple length, unpack appropriately.
+        # Unpack each tuple.
         if len(entry) == 2:
             file_path, comment = entry
         elif len(entry) >= 3:
-            file_path, comment, _ = entry   # ignore the third element even if present
+            file_path, comment, _ = entry   # ignore file_content if present
         else:
             raise ValueError("Each tuple in file_paths must have at least 2 elements.")
+
         var_name = build_variable_name(file_path)
         var_names.append(var_name)
-        # Create an embedding line:
+
+        # IMPORTANT: All files are now relative to the templates folder.
+        # Embed path is always "templates/<project_name>/<file_path>"
+        embed_path = f"templates/{project_name}/{file_path}"
+
+        aggregated_tuples.append((embed_path, var_name))
+
+        # Construct the TH embedding line.
         embed_line = f'{var_name} :: ByteString\n'
-        embed_line += f'{var_name} = $(embedFile "templates/{project_name}/{file_path}")'
+        embed_line += f'{var_name} = $(embedFile "{embed_path}")'
         if comment:
             embed_line += f'  -- {comment}'
         embed_lines.append(embed_line)
 
-    export_list = ", ".join(var_names)
+    export_list = ", ".join(var_names) + ", templates"
     header += export_list + "\n  ) where\n\n"
 
     imports = (
@@ -176,7 +191,22 @@ def generate_templates_hs_module(file_paths, output_path, project_name):
 
     body = "\n\n".join(embed_lines)
 
-    module_text = header + imports + body + "\n"
+    # Create the aggregated 'templates' list.
+    template_list_lines = []
+    template_list_lines.append("templates :: [(FilePath, ByteString)]")
+    template_list_lines.append("templates =")
+    template_list_lines.append("  [")
+    for (embed_path, var_name) in aggregated_tuples:
+        template_list_lines.append(f'    ("{embed_path}", {var_name}),')
+    # Remove trailing comma from the last entry if any entries exist.
+    if len(aggregated_tuples) > 0:
+        template_list_lines[-1] = template_list_lines[-1].rstrip(',')
+    template_list_lines.append("  ]")
+
+    aggregated_block = "\n".join(template_list_lines)
+
+    module_text = header + imports + body + "\n\n" + aggregated_block + "\n"
+    # module_text = header + imports + body
 
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(module_text)
@@ -219,6 +249,7 @@ import System.IO (stdout, hFlush)
 import Data.List ( isPrefixOf )
 import Data.Time ( getCurrentTime, utctDay )
 import Data.Time.Calendar ( toGregorian )
+import Data.List (stripPrefix)
 
 
 import {templates_module_name}
@@ -270,6 +301,7 @@ updatePackageYaml content appName author gitRemote maintainer description year =
   in BS8.pack (unlines ls'')
 """
     # Build the templates list using each tuple’s relative path and variable name.
+
     templates_lines = []
     for rel_path, var_name, _ in gathered_files:
         templates_lines.append(f'  ("{rel_path}", {var_name})')
@@ -278,7 +310,7 @@ updatePackageYaml content appName author gitRemote maintainer description year =
                       ",\n".join(templates_lines) +
                       "\n  ]\n\n")
 
-    main_function = '''{-
+    main_function = f"""{{-
   scaffold performs the following steps:
 
   STEP I -
@@ -302,7 +334,7 @@ updatePackageYaml content appName author gitRemote maintainer description year =
     · In package.yaml, update fields using the provided information,
       including setting the copyright year to the current year and
       replacing any occurrence of "YourApp" with the new app name.
--}
+-}}
 scaffold :: FilePath -> IO ()
 scaffold targetDir = do
   -- The app (project) name is inferred from the targetDir using takeBaseName.
@@ -345,16 +377,34 @@ scaffold targetDir = do
   putStrLn $ "[INFO] Running: " ++ stackNewCmd
   callCommand stackNewCmd
 
-  -- STEP III/IV: Overwrite the generated project files with our templates.
-  let fullPath sub = targetDir </> sub
+   -- STEP III/IV: Overwrite generated project files with our custom templates.
+  -- Define a helper to strip the "templates/<appName>/" prefix.
+  let stripTemplatePrefix rel =
+        case stripPrefix ("templates/" ++ "{project_name}" ++ "/") rel of
+          Just stripped -> stripped
+          Nothing       -> rel
+
+      fullPath sub = targetDir </> sub
+
+      -- Use the aggregated list of templates from the qualified import.
+      fileTemplates = {templates_module_name}.templates
+
   mapM_ (\\(rel, fileData) -> do
-           let dir = takeDirectory rel
-           when (not (null dir)) $ ensureDir (fullPath dir)
-           let finalContent = if rel == "package.yaml"
+           putStrLn $ "[DEBUG] Original relative path: " ++ rel
+           let rel' = stripTemplatePrefix rel
+           putStrLn $ "[DEBUG] Stripped relative path: " ++ rel'
+           let dir = takeDirectory rel'
+           putStrLn $ "[DEBUG] Directory for file (from stripped path): " ++ dir
+           when (not (null dir)) $ do
+             putStrLn $ "[DEBUG] Ensuring directory exists: " ++ (fullPath dir)
+             ensureDir (fullPath dir)
+           let finalContent = if rel' == "package.yaml"
                                 then updatePackageYaml fileData appName author gitRemote maintainer projDescription currentYear
                                 else fileData
-           writeFileWithInfo (fullPath rel) finalContent
-        ) templates
+           putStrLn $ "[DEBUG] Writing file to: " ++ (fullPath rel')
+           writeFileWithInfo (fullPath rel') finalContent
+        ) fileTemplates
+
 
   putStrLn "[INFO] tinfoiltiger - Scaffolding complete. You can now edit your files or compile."
 
@@ -367,9 +417,12 @@ writeFileWithInfo path content = do
 -- | Ensure that a directory exists.
 ensureDir :: FilePath -> IO ()
 ensureDir = createDirectoryIfMissing True
-'''
 
-    module_text = header + templates_list + main_function
+
+    """
+
+    # module_text = header + templates_list + main_function
+    module_text = header + "\n" + main_function
 
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(module_text)

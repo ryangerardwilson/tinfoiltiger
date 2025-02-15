@@ -27,6 +27,7 @@ module QuickStartUpB.Templates
     libUtilsRedis,
     libConstantsEnv,
     libRoutehandlersAuth,
+    templates,
   )
 where
 
@@ -107,3 +108,32 @@ libConstantsEnv = $(embedFile "templates/QuickStartUpB/lib/Constants/Env.hs") --
 
 libRoutehandlersAuth :: ByteString
 libRoutehandlersAuth = $(embedFile "templates/QuickStartUpB/lib/RouteHandlers/Auth.hs") -- libRoutehandlersAuth
+
+templates :: [(FilePath, ByteString)]
+templates =
+  [ ("templates/QuickStartUpB/Setup.hs", fileSetupExtHs),
+    ("templates/QuickStartUpB/package.yaml", filePackageExtYaml),
+    ("templates/QuickStartUpB/LICENSE", fileLicense),
+    ("templates/QuickStartUpB/.gitignore", extGitignore),
+    ("templates/QuickStartUpB/stack.yaml", fileStackExtYaml),
+    ("templates/QuickStartUpB/README.md", fileReadmeExtMd),
+    ("templates/QuickStartUpB/app/Main.hs", appMain),
+    ("templates/QuickStartUpB/test/Spec.hs", testSpec),
+    ("templates/QuickStartUpB/resources/signup.html", resourcesSignup),
+    ("templates/QuickStartUpB/resources/debugger.html", resourcesDebugger),
+    ("templates/QuickStartUpB/resources/main.css", resourcesMain),
+    ("templates/QuickStartUpB/resources/redis_insert.html", resourcesRedisInsert),
+    ("templates/QuickStartUpB/resources/about.html", resourcesAbout),
+    ("templates/QuickStartUpB/resources/login.html", resourcesLogin),
+    ("templates/QuickStartUpB/resources/landing.html", resourcesLanding),
+    ("templates/QuickStartUpB/resources/index.html", resourcesIndex),
+    ("templates/QuickStartUpB/resources/dashboard.html", resourcesDashboard),
+    ("templates/QuickStartUpB/resources/assets/styles.css", resourcesAssetsStyles),
+    ("templates/QuickStartUpB/resources/components/wrappers/base-template.html", resourcesComponentsWrappersBaseTemplate),
+    ("templates/QuickStartUpB/resources/components/embeds/main-content.html", resourcesComponentsEmbedsMainContent),
+    ("templates/QuickStartUpB/lib/Utils/MonadManager.hs", libUtilsMonadmanager),
+    ("templates/QuickStartUpB/lib/Utils/Renderer.hs", libUtilsRenderer),
+    ("templates/QuickStartUpB/lib/Utils/Redis.hs", libUtilsRedis),
+    ("templates/QuickStartUpB/lib/Constants/Env.hs", libConstantsEnv),
+    ("templates/QuickStartUpB/lib/RouteHandlers/Auth.hs", libRoutehandlersAuth)
+  ]

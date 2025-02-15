@@ -7,8 +7,8 @@ import Initializer (initTool)
 import Logo (logo)
 import NewTemplateController (handleNewTemplate)
 import System.Environment (getArgs)
-import Text.RawString.QQ (r)
-import UpdateController (handleUpdate, handleUpgrade)
+-- import Text.RawString.QQ (r)
+import UpgradeController (handleUpgrade)
 
 main :: IO ()
 main = do
@@ -31,12 +31,8 @@ main = do
         then
           handleNewTemplate
         else
-          if "--update" `elem` args
+          if "--upgrade" `elem` args
             then
-              handleUpdate
+              handleUpgrade
             else
-              if "--upgrade" `elem` args
-                then
-                  handleUpgrade
-                else
-                  putStrLn "Usage: tinfoiltiger --init | --new <target_directory> --template <template_name> | --update | --upgrade"
+              putStrLn "Usage: tinfoiltiger --init | --new <target_directory> --template <template_name> | --upgrade"

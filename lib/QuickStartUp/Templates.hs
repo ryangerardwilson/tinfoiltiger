@@ -29,6 +29,7 @@ module QuickStartUp.Templates
     libTinfoiltigerUtilsRenderer,
     libTinfoiltigerUtilsRedis,
     libTinfoiltigerRoutehandlersAuth,
+    templates,
   )
 where
 
@@ -115,3 +116,34 @@ libTinfoiltigerUtilsRedis = $(embedFile "templates/QuickStartUp/lib/TinFoilTiger
 
 libTinfoiltigerRoutehandlersAuth :: ByteString
 libTinfoiltigerRoutehandlersAuth = $(embedFile "templates/QuickStartUp/lib/TinFoilTiger/RouteHandlers/Auth.hs") -- libTinfoiltigerRoutehandlersAuth
+
+templates :: [(FilePath, ByteString)]
+templates =
+  [ ("templates/QuickStartUp/Setup.hs", fileSetupExtHs),
+    ("templates/QuickStartUp/package.yaml", filePackageExtYaml),
+    ("templates/QuickStartUp/LICENSE", fileLicense),
+    ("templates/QuickStartUp/.gitignore", extGitignore),
+    ("templates/QuickStartUp/stack.yaml", fileStackExtYaml),
+    ("templates/QuickStartUp/README.md", fileReadmeExtMd),
+    ("templates/QuickStartUp/app/Main.hs", appMain),
+    ("templates/QuickStartUp/test/Spec.hs", testSpec),
+    ("templates/QuickStartUp/resources/signup.html", resourcesSignup),
+    ("templates/QuickStartUp/resources/debugger.html", resourcesDebugger),
+    ("templates/QuickStartUp/resources/main.css", resourcesMain),
+    ("templates/QuickStartUp/resources/redis_insert.html", resourcesRedisInsert),
+    ("templates/QuickStartUp/resources/about.html", resourcesAbout),
+    ("templates/QuickStartUp/resources/login.html", resourcesLogin),
+    ("templates/QuickStartUp/resources/landing.html", resourcesLanding),
+    ("templates/QuickStartUp/resources/index.html", resourcesIndex),
+    ("templates/QuickStartUp/resources/dashboard.html", resourcesDashboard),
+    ("templates/QuickStartUp/resources/assets/styles.css", resourcesAssetsStyles),
+    ("templates/QuickStartUp/resources/components/wrappers/base-template.html", resourcesComponentsWrappersBaseTemplate),
+    ("templates/QuickStartUp/resources/components/embeds/main-content.html", resourcesComponentsEmbedsMainContent),
+    ("templates/QuickStartUp/lib/Env.hs", libEnv),
+    ("templates/QuickStartUp/lib/Routes.hs", libRoutes),
+    ("templates/QuickStartUp/lib/TinFoilTiger/Kernel.hs", libTinfoiltigerKernel),
+    ("templates/QuickStartUp/lib/TinFoilTiger/Utils/MonadManager.hs", libTinfoiltigerUtilsMonadmanager),
+    ("templates/QuickStartUp/lib/TinFoilTiger/Utils/Renderer.hs", libTinfoiltigerUtilsRenderer),
+    ("templates/QuickStartUp/lib/TinFoilTiger/Utils/Redis.hs", libTinfoiltigerUtilsRedis),
+    ("templates/QuickStartUp/lib/TinFoilTiger/RouteHandlers/Auth.hs", libTinfoiltigerRoutehandlersAuth)
+  ]

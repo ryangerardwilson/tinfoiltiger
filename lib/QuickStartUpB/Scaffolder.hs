@@ -12,7 +12,7 @@ where
 import Control.Monad (when)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
-import Data.List (isPrefixOf)
+import Data.List (isPrefixOf, stripPrefix)
 import Data.Time (getCurrentTime, utctDay)
 import Data.Time.Calendar (toGregorian)
 import QuickStartUpB.Templates
@@ -78,35 +78,6 @@ updatePackageYaml content appName author gitRemote maintainer description year =
           )
           ls'
    in BS8.pack (unlines ls'')
-
-templates :: [(FilePath, BS.ByteString)]
-templates =
-  [ ("Setup.hs", fileSetupExtHs),
-    ("package.yaml", filePackageExtYaml),
-    ("LICENSE", fileLicense),
-    (".gitignore", extGitignore),
-    ("stack.yaml", fileStackExtYaml),
-    ("README.md", fileReadmeExtMd),
-    ("app/Main.hs", appMain),
-    ("test/Spec.hs", testSpec),
-    ("resources/signup.html", resourcesSignup),
-    ("resources/debugger.html", resourcesDebugger),
-    ("resources/main.css", resourcesMain),
-    ("resources/redis_insert.html", resourcesRedisInsert),
-    ("resources/about.html", resourcesAbout),
-    ("resources/login.html", resourcesLogin),
-    ("resources/landing.html", resourcesLanding),
-    ("resources/index.html", resourcesIndex),
-    ("resources/dashboard.html", resourcesDashboard),
-    ("resources/assets/styles.css", resourcesAssetsStyles),
-    ("resources/components/wrappers/base-template.html", resourcesComponentsWrappersBaseTemplate),
-    ("resources/components/embeds/main-content.html", resourcesComponentsEmbedsMainContent),
-    ("lib/Utils/MonadManager.hs", libUtilsMonadmanager),
-    ("lib/Utils/Renderer.hs", libUtilsRenderer),
-    ("lib/Utils/Redis.hs", libUtilsRedis),
-    ("lib/Constants/Env.hs", libConstantsEnv),
-    ("lib/RouteHandlers/Auth.hs", libRoutehandlersAuth)
-  ]
 
 {-
   scaffold performs the following steps:
@@ -174,19 +145,36 @@ scaffold targetDir = do
   putStrLn $ "[INFO] Running: " ++ stackNewCmd
   callCommand stackNewCmd
 
-  -- STEP III/IV: Overwrite the generated project files with our templates.
-  let fullPath sub = targetDir </> sub
+  -- STEP III/IV: Overwrite generated project files with our custom templates.
+  -- Define a helper to strip the "templates/<appName>/" prefix.
+  let stripTemplatePrefix rel =
+        case stripPrefix ("templates/" ++ "QuickStartUpB" ++ "/") rel of
+          Just stripped -> stripped
+          Nothing -> rel
+
+      fullPath sub = targetDir </> sub
+
+      -- Use the aggregated list of templates from the qualified import.
+      fileTemplates = QuickStartUpB.Templates.templates
+
   mapM_
     ( \(rel, fileData) -> do
-        let dir = takeDirectory rel
-        when (not (null dir)) $ ensureDir (fullPath dir)
+        putStrLn $ "[DEBUG] Original relative path: " ++ rel
+        let rel' = stripTemplatePrefix rel
+        putStrLn $ "[DEBUG] Stripped relative path: " ++ rel'
+        let dir = takeDirectory rel'
+        putStrLn $ "[DEBUG] Directory for file (from stripped path): " ++ dir
+        when (not (null dir)) $ do
+          putStrLn $ "[DEBUG] Ensuring directory exists: " ++ (fullPath dir)
+          ensureDir (fullPath dir)
         let finalContent =
-              if rel == "package.yaml"
+              if rel' == "package.yaml"
                 then updatePackageYaml fileData appName author gitRemote maintainer projDescription currentYear
                 else fileData
-        writeFileWithInfo (fullPath rel) finalContent
+        putStrLn $ "[DEBUG] Writing file to: " ++ (fullPath rel')
+        writeFileWithInfo (fullPath rel') finalContent
     )
-    templates
+    fileTemplates
 
   putStrLn "[INFO] tinfoiltiger - Scaffolding complete. You can now edit your files or compile."
 
