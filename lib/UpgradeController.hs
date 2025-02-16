@@ -14,6 +14,9 @@ import Data.Time.Calendar (toGregorian)
 import Env (version)
 import Network.HTTP.Client (HttpException)
 import Network.HTTP.Simple (getResponseBody, httpLBS, parseRequest)
+-----------------------------------
+-- NEED TO MAKE THE PYTHON SCRIPT DYNAMICALLY ADD THE BELOW 2 IMPORTS, ALONG WITH THE METHOD getEmbeddedPackageYaml
+-----------------------------------
 import qualified QuickStartUp.Templates as TQuickStartUp
 import qualified QuickStartUpB.Templates as TQuickStartUpB
 import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileExist, removeDirectoryRecursive)
