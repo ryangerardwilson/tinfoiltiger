@@ -3,6 +3,7 @@
 
 module Main (main) where
 
+import Env (version)
 import Initializer (initTool)
 import Logo (logo)
 import NewTemplateController (handleNewTemplate)
@@ -16,7 +17,7 @@ main = do
 
   putStrLn logo
 
-  let version = "0.0.53-1"
+  -- let version = "0.0.53-1"
   putStrLn $ "Version: " ++ version
 
   -- Get command-line arguments.

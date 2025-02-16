@@ -43,6 +43,9 @@ library:
     - transformers
     - wai-middleware-static
     - directory
+    - optparse-applicative
+    - aeson
+    - megaparsec
 
 executables:
   YourApp-exe:

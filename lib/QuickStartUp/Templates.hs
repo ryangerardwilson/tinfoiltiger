@@ -24,6 +24,7 @@ module QuickStartUp.Templates
     resourcesComponentsEmbedsMainContent,
     libEnv,
     libRoutes,
+    libTinfoiltigerEnv,
     libTinfoiltigerKernel,
     libTinfoiltigerUtilsMonadmanager,
     libTinfoiltigerUtilsRenderer,
@@ -102,6 +103,9 @@ libEnv = $(embedFile "templates/QuickStartUp/lib/Env.hs") -- libEnv
 libRoutes :: ByteString
 libRoutes = $(embedFile "templates/QuickStartUp/lib/Routes.hs") -- libRoutes
 
+libTinfoiltigerEnv :: ByteString
+libTinfoiltigerEnv = $(embedFile "templates/QuickStartUp/lib/TinFoilTiger/Env.hs") -- libTinfoiltigerEnv
+
 libTinfoiltigerKernel :: ByteString
 libTinfoiltigerKernel = $(embedFile "templates/QuickStartUp/lib/TinFoilTiger/Kernel.hs") -- libTinfoiltigerKernel
 
@@ -141,6 +145,7 @@ templates =
     ("templates/QuickStartUp/resources/components/embeds/main-content.html", resourcesComponentsEmbedsMainContent),
     ("templates/QuickStartUp/lib/Env.hs", libEnv),
     ("templates/QuickStartUp/lib/Routes.hs", libRoutes),
+    ("templates/QuickStartUp/lib/TinFoilTiger/Env.hs", libTinfoiltigerEnv),
     ("templates/QuickStartUp/lib/TinFoilTiger/Kernel.hs", libTinfoiltigerKernel),
     ("templates/QuickStartUp/lib/TinFoilTiger/Utils/MonadManager.hs", libTinfoiltigerUtilsMonadmanager),
     ("templates/QuickStartUp/lib/TinFoilTiger/Utils/Renderer.hs", libTinfoiltigerUtilsRenderer),
