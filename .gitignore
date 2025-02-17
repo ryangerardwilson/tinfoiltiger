@@ -17,4 +17,5 @@ testApp
 debian/version_build_folders/*
 debian/version_debs/*
 debian/dists/*
+automations/modules/__pycache__
 
