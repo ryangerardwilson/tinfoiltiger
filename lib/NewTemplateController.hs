@@ -5,7 +5,6 @@ module NewTemplateController (handleNewTemplate) where
 
 import Data.List (sort)
 import qualified Data.Map.Strict as Map
--- import System.Directory (doesDirectoryExist)
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
