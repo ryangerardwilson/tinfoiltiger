@@ -13,10 +13,12 @@ import qualified Data.Map.Strict as Map
 import Env (version)
 import Network.HTTP.Client (HttpException)
 import Network.HTTP.Simple (getResponseBody, httpLBS, parseRequest)
-import System.Directory ( createDirectoryIfMissing,
-                          doesDirectoryExist,
-                          doesFileExist,
-                          removeDirectoryRecursive )
+import System.Directory
+  ( createDirectoryIfMissing,
+    doesDirectoryExist,
+    doesFileExist,
+    removeDirectoryRecursive,
+  )
 import System.Exit (exitFailure)
 import System.FilePath (takeDirectory, takeFileName, (</>))
 import qualified TemplateMappings as TM
@@ -36,37 +38,37 @@ handleUpgrade = do
 
   -- Read and parse package.yaml to extract the x-tinfoiltiger field.
   content <- BS.readFile "package.yaml"
-  let pkgLines    = BS8.lines content
+  let pkgLines = BS8.lines content
       maybeXField = find (BS8.isPrefixOf "x-tinfoiltiger:") pkgLines
   case maybeXField of
     Nothing -> do
       putStrLn "No 'x-tinfoiltiger' field found in package.yaml."
       putStrLn "Please cd into your project directory and set the value to something like \"TemplateName/get-latest\"."
     Just line -> do
-      let rawVal       = BS8.drop (BS8.length "x-tinfoiltiger:") line
+      let rawVal = BS8.drop (BS8.length "x-tinfoiltiger:") line
           projValueRaw = trim (BS8.unpack rawVal)
-          projValue    = removeQuotes projValueRaw
+          projValue = removeQuotes projValueRaw
       putStrLn $ "Found x-tinfoiltiger field in project package.yaml: " ++ projValue
       let (tmpl, rest) = break (== '/') projValue
       if null rest
         then putStrLn "Error: The x-tinfoiltiger field is not in the expected format \"TemplateName/version\"."
         else do
-          let projVersion = drop 1 rest  -- drop the '/'
+          let projVersion = drop 1 rest -- drop the '/'
           binaryPkg <- getEmbeddedPackageYaml tmpl
-          let binLines       = BS8.lines binaryPkg
-              maybeBinField  = find (BS8.isPrefixOf "x-tinfoiltiger:") binLines
+          let binLines = BS8.lines binaryPkg
+              maybeBinField = find (BS8.isPrefixOf "x-tinfoiltiger:") binLines
           case maybeBinField of
             Nothing -> putStrLn "Error: The embedded package.yaml does not have an x-tinfoiltiger field."
             Just binLine -> do
-              let binRaw      = BS8.drop (BS8.length "x-tinfoiltiger:") binLine
+              let binRaw = BS8.drop (BS8.length "x-tinfoiltiger:") binLine
                   binValueRaw = trim (BS8.unpack binRaw)
-                  binValue    = removeQuotes binValueRaw
+                  binValue = removeQuotes binValueRaw
               putStrLn $ "Template header version in embedded package.yaml: " ++ binValue
               let (_, binRest) = break (== '/') binValue
               if null binRest
                 then putStrLn "Error: Embedded x-tinfoiltiger field is not in expected format."
                 else do
-                  let binVersion     = drop 1 binRest
+                  let binVersion = drop 1 binRest
                       currentCodeVer = normalizeVersion version
                   newerCodeAvailable <- checkCurrentCodeVersion version
                   if newerCodeAvailable
@@ -94,18 +96,18 @@ handleUpgrade = do
         then putStrLn "Error: package.yaml not found." >> exitFailure
         else do
           currContent <- BS.readFile "package.yaml"
-          let currLines         = lines (BS8.unpack currContent)
-              updatedXLines     = updateXFieldFunc currLines newXField
+          let currLines = lines (BS8.unpack currContent)
+              updatedXLines = updateXFieldFunc currLines newXField
               (beforeLib, libBlockAndAfter) = break isLibLine updatedXLines
-              currentLibBlock   = if null libBlockAndAfter then [] else extractLibraryBlock libBlockAndAfter
-              localDeps         = extractDependencies currentLibBlock
+              currentLibBlock = if null libBlockAndAfter then [] else extractLibraryBlock libBlockAndAfter
+              localDeps = extractDependencies currentLibBlock
           putStrLn "[DEBUG] Current library block from package.yaml:"
           mapM_ putStrLn currentLibBlock
           putStrLn $ "[DEBUG] Extracted local dependencies: " ++ show localDeps
 
-          let embeddedLines     = lines (BS8.unpack embeddedPkgBs)
-              embeddedLibBlock  = extractLibraryBlock embeddedLines
-              embeddedDeps      = extractDependencies embeddedLibBlock
+          let embeddedLines = lines (BS8.unpack embeddedPkgBs)
+              embeddedLibBlock = extractLibraryBlock embeddedLines
+              embeddedDeps = extractDependencies embeddedLibBlock
           putStrLn "[DEBUG] Embedded library block from embedded package.yaml:"
           mapM_ putStrLn embeddedLibBlock
           putStrLn $ "[DEBUG] Extracted embedded dependencies: " ++ show embeddedDeps
@@ -130,7 +132,7 @@ handleUpgrade = do
       where
         updateXFieldFunc :: [String] -> String -> [String]
         updateXFieldFunc [] _ = []
-        updateXFieldFunc (l:ls) newVal
+        updateXFieldFunc (l : ls) newVal
           | "x-tinfoiltiger:" `isPrefixOf` dropSpaces l = newVal : ls
           | otherwise = l : updateXFieldFunc ls newVal
 
@@ -142,30 +144,30 @@ handleUpgrade = do
 
         extractLibraryBlock :: [String] -> [String]
         extractLibraryBlock [] = []
-        extractLibraryBlock (l:ls)
+        extractLibraryBlock (l : ls)
           | "library:" `isPrefixOf` dropSpaces l =
               l : takeWhile (\s -> null s || (not (null s) && head s `elem` (" \t" :: String))) ls
           | otherwise = extractLibraryBlock ls
 
         dropLibraryBlock :: [String] -> [String]
         dropLibraryBlock [] = []
-        dropLibraryBlock (_:ls) = dropWhile (\s -> null s || (not (null s) && head s `elem` (" \t" :: String))) ls
+        dropLibraryBlock (_ : ls) = dropWhile (\s -> null s || (not (null s) && head s `elem` (" \t" :: String))) ls
 
         extractDependencies :: [String] -> [String]
         extractDependencies [] = []
-        extractDependencies (l:ls)
+        extractDependencies (l : ls)
           | "dependencies:" `isPrefixOf` dropSpaces l =
               let deps = takeWhile (\s -> not (null s) && head s `elem` (" \t" :: String)) ls
                in map (trim . dropDash) deps
           | otherwise = extractDependencies ls
           where
             dropDash s = case dropWhile (== ' ') s of
-              ('-':rest) -> trim rest
+              ('-' : rest) -> trim rest
               other -> trim other
 
         nub :: (Eq a) => [a] -> [a]
-        nub []     = []
-        nub (x:xs) = x : nub (filter (/= x) xs)
+        nub [] = []
+        nub (x : xs) = x : nub (filter (/= x) xs)
 
     --------------------------------------------------------------------------------
     -- Nested helper: upgradeLibDir (upgrades files under lib/TinFoilTiger).
@@ -197,8 +199,8 @@ handleUpgrade = do
         writeEmbeddedFile :: FilePath -> String -> (FilePath, BS.ByteString) -> IO ()
         writeEmbeddedFile baseDir prefix (fp, content) = do
           let relativePath = drop (length prefix) fp
-              targetPath   = baseDir </> relativePath
-              destDir      = takeDirectory targetPath
+              targetPath = baseDir </> relativePath
+              destDir = takeDirectory targetPath
           putStrLn $ "[DEBUG] Writing file: " ++ fp ++ " -> " ++ targetPath
           createDirectoryIfMissing True destDir
           BS.writeFile targetPath content
@@ -229,19 +231,22 @@ handleUpgrade = do
       putStrLn "Checking for a newer version of current code remotely..."
       let url = "https://files.ryangerardwilson.com/tinfoiltiger/debian/dists/stable/main/binary-amd64/Packages"
       req <- parseRequest url
-      response <- httpLBS req `catch` (\(e :: HttpException) -> do
-                                          putStrLn ("Error fetching remote package info: " ++ show e)
-                                          exitFailure)
-      let body          = L8.lines (getResponseBody response)
-          trimmedBody   = map (L8.pack . trim . L8.unpack) body
-          mVersionLine  = find (L8.isPrefixOf "Version:") trimmedBody
+      response <-
+        httpLBS req
+          `catch` ( \(e :: HttpException) -> do
+                      putStrLn ("Error fetching remote package info: " ++ show e)
+                      exitFailure
+                  )
+      let body = L8.lines (getResponseBody response)
+          trimmedBody = map (L8.pack . trim . L8.unpack) body
+          mVersionLine = find (L8.isPrefixOf "Version:") trimmedBody
       case mVersionLine of
         Nothing -> do
           putStrLn "Could not determine remote version for current code."
           return False
         Just verLine -> do
           let remoteVerRaw = L8.unpack (L8.drop 8 verLine)
-              remoteVer    = normalizeVersion (trim remoteVerRaw)
+              remoteVer = normalizeVersion (trim remoteVerRaw)
           putStrLn $ "[DEBUG] Current code version: " ++ normalizeVersion currentVer
           putStrLn $ "[DEBUG] Remote code version: " ++ remoteVer
           return (compareVersions (normalizeVersion currentVer) remoteVer == LT)
@@ -288,4 +293,3 @@ handleUpgrade = do
       if length s >= 2 && head s == '"' && last s == '"'
         then tail (init s)
         else s
-

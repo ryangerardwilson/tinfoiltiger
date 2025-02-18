@@ -1,6 +1,6 @@
-name:                YourApp
+name:                QuickGtk
 version:             0.1.0.0
-github:              "githubuser/YourApp"
+github:              "githubuser/QuickGtk"
 license:             BSD-3-Clause
 author:              "Author name here"
 maintainer:          "example@example.com"
@@ -16,7 +16,7 @@ extra-source-files:
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/githubuser/YourApp#readme>
+description:         Please see the README on GitHub at <https://github.com/githubuser/QuickGtk#readme>
 
 dependencies:
 - base >= 4.7 && < 5
@@ -34,45 +34,22 @@ ghc-options:
 
 library:
   source-dirs: lib
-  dependencies:
-    - text
-    - template-haskell
-    - bytestring
-    - file-embed
-    - regex-tdfa
-    - filepath
-    - containers
-    - hedis
-    - scotty
-    - http-types
-    - uuid
-    - transformers
 
 executables:
-  YourApp-exe:
-    main: Main.hs
-    source-dirs: app
+  QuickGtk-exe:
+    main:                Main.hs
+    source-dirs:         app
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - YourApp
-    - template-haskell
-    - containers
-    - scotty
-    - file-embed
-    - bytestring
-    - http-types
+    - QuickGtk
+    - gi-gtk
     - text
-    - wai-middleware-static 
-    - directory
-    - filepath
-    - hedis
-    - transformers
 
 tests:
-  YourApp-test:
+  QuickGtk-test:
     main:                Spec.hs
     source-dirs:         test
     ghc-options:
@@ -80,4 +57,4 @@ tests:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - YourApp
+    - QuickGtk
