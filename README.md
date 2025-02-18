@@ -14,7 +14,9 @@ At its core, the framework uses a pure in-memory architecture to execute applica
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/tinfoiltiger.gpg] https://files.ryangerardwilson.com/tinfoiltiger/debian stable main" | sudo tee /etc/apt/sources.list.d/tinfoiltiger.list
     sudo apt update
     sudo apt-get install tinfoiltiger
-    # This ensures the following are installed: Stack, Redis, a custom Tailwind CSS utility tool (required by the Setup.hs of your project)
+
+This ensures the following are installed: Stack, Redis, a custom Tailwind CSS utility tool (required by the Setup.hs of your project)
+
     tinfoiltiger --init
 
 ## 3. Subsequent Updates
