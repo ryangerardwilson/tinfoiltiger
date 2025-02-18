@@ -1,18 +1,17 @@
--- UpgradeController.hs
+-- lib/UpgradeController.hs
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module UpgradeController (handleUpgrade) where
 
 import Control.Exception (catch)
--- import Data.Time (getCurrentTime, utctDay)
--- import Data.Time.Calendar (toGregorian)
-
-import Control.Monad (forM)
+-- import Control.Monad (forM)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Lazy.Char8 as L8
-import Data.List (find)
+import Data.List (find, isPrefixOf)
+-- import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Env (version)
 import Network.HTTP.Client (HttpException)
 import Network.HTTP.Simple (getResponseBody, httpLBS, parseRequest)
@@ -20,20 +19,19 @@ import System.Directory
   ( createDirectoryIfMissing,
     doesDirectoryExist,
     doesFileExist,
-    listDirectory,
     removeDirectoryRecursive,
   )
 import System.Exit (exitFailure)
-import System.FilePath (takeDirectory, (</>))
-
+import System.FilePath (takeDirectory, takeFileName, (</>))
 -- import System.IO (hPutStrLn, stderr)
+import qualified TemplateMappings as TM
 
 --------------------------------------------------------------------
--- Main entry point for upgrade
+-- Main entry point for the upgrade command
 handleUpgrade :: IO ()
 handleUpgrade = do
-  exists <- doesFileExist "package.yaml"
-  if not exists
+  pkgExists <- doesFileExist "package.yaml"
+  if not pkgExists
     then do
       putStrLn "Error: package.yaml not found in the current directory."
       putStrLn "Please cd into your project directory."
@@ -89,237 +87,230 @@ handleUpgrade = do
                           upgradeLibDir tmpl
                           updateProjectPackageYaml binaryPkg newHeader
                           checkRemoteVersion projVersion
+
+--------------------------------------------------------------------
+-- Modify package.yaml by merging dependency blocks
+updateProjectPackageYaml :: BS.ByteString -> String -> IO ()
+updateProjectPackageYaml embeddedPkgBs newXField = do
+  putStrLn "[INFO] Updating project package.yaml..."
+  pkgExists <- doesFileExist "package.yaml"
+  if not pkgExists
+    then putStrLn "Error: package.yaml not found." >> exitFailure
+    else do
+      currContent <- BS.readFile "package.yaml"
+      let currLines = lines (BS8.unpack currContent)
+          updatedXLines = updateXFieldFunc currLines newXField
+          (beforeLib, libBlockAndAfter) = break isLibLine updatedXLines
+          currentLibBlock = if null libBlockAndAfter then [] else extractLibraryBlock libBlockAndAfter
+          localDeps = extractDependencies currentLibBlock
+      putStrLn "[DEBUG] Current library block from package.yaml:"
+      mapM_ putStrLn currentLibBlock
+      putStrLn $ "[DEBUG] Extracted local dependencies: " ++ show localDeps
+
+      let embeddedLines = lines (BS8.unpack embeddedPkgBs)
+          embeddedLibBlock = extractLibraryBlock embeddedLines
+          embeddedDeps = extractDependencies embeddedLibBlock
+      putStrLn "[DEBUG] Embedded library block from embedded package.yaml:"
+      mapM_ putStrLn embeddedLibBlock
+      putStrLn $ "[DEBUG] Extracted embedded dependencies: " ++ show embeddedDeps
+
+      let mergedDeps = nub (localDeps ++ embeddedDeps)
+      putStrLn $ "[DEBUG] Merged dependency list: " ++ show mergedDeps
+
+      let newLibBlock =
+            [ "library:",
+              "  source-dirs: lib",
+              "  dependencies:"
+            ]
+              ++ map (\d -> "    - " ++ d) mergedDeps
+      putStrLn "[DEBUG] New library block to be inserted:"
+      mapM_ putStrLn newLibBlock
+
+      let finalLines = beforeLib ++ newLibBlock ++ [""] ++ dropLibraryBlock libBlockAndAfter
+      putStrLn "[DEBUG] Final package.yaml content (excerpt):"
+      mapM_ putStrLn (take 20 finalLines)
+      BS.writeFile "package.yaml" (BS8.pack (unlines finalLines))
+      putStrLn "[INFO] package.yaml updated."
   where
-    ----------------------------------------------------------------
-    -- Modify package.yaml by merging dependency blocks
-    updateProjectPackageYaml :: BS.ByteString -> String -> IO ()
-    updateProjectPackageYaml embeddedPkgBs newXField = do
-      putStrLn "[INFO] Updating project package.yaml..."
-      pkgExists <- doesFileExist "package.yaml"
-      if not pkgExists
-        then putStrLn "Error: package.yaml not found." >> exitFailure
-        else do
-          currContent <- BS.readFile "package.yaml"
-          let currLines = lines (BS8.unpack currContent)
-              updatedXLines = updateXFieldFunc currLines newXField
-              (beforeLib, libBlockAndAfter) = break isLibLine updatedXLines
-              currentLibBlock = if null libBlockAndAfter then [] else extractLibraryBlock libBlockAndAfter
-              localDeps = extractDependencies currentLibBlock
-          putStrLn "[DEBUG] Current library block from package.yaml:"
-          mapM_ putStrLn currentLibBlock
-          putStrLn $ "[DEBUG] Extracted local dependencies: " ++ show localDeps
+    updateXFieldFunc :: [String] -> String -> [String]
+    updateXFieldFunc [] _ = []
+    updateXFieldFunc (l : ls) newVal
+      | "x-tinfoiltiger:" `isPrefixOf` dropSpaces l = newVal : ls
+      | otherwise = l : updateXFieldFunc ls newVal
 
-          let embeddedLines = lines (BS8.unpack embeddedPkgBs)
-              embeddedLibBlock = extractLibraryBlock embeddedLines
-              embeddedDeps = extractDependencies embeddedLibBlock
-          putStrLn "[DEBUG] Embedded library block from embedded package.yaml:"
-          mapM_ putStrLn embeddedLibBlock
-          putStrLn $ "[DEBUG] Extracted embedded dependencies: " ++ show embeddedDeps
+    isLibLine :: String -> Bool
+    isLibLine s = "library:" `isPrefixOf` dropSpaces s
 
-          let mergedDeps = nub (localDeps ++ embeddedDeps)
-          putStrLn $ "[DEBUG] Merged dependency list: " ++ show mergedDeps
+    dropSpaces :: String -> String
+    dropSpaces = dropWhile (`elem` (" \t" :: String))
 
-          let newLibBlock =
-                [ "library:",
-                  "  source-dirs: lib",
-                  "  dependencies:"
-                ]
-                  ++ map (\d -> "    - " ++ d) mergedDeps
-          putStrLn "[DEBUG] New library block to be inserted:"
-          mapM_ putStrLn newLibBlock
+    extractLibraryBlock :: [String] -> [String]
+    extractLibraryBlock [] = []
+    extractLibraryBlock (l : ls)
+      | "library:" `isPrefixOf` dropSpaces l =
+          l : takeWhile (\s -> null s || (not (null s) && head s `elem` (" \t" :: String))) ls
+      | otherwise = extractLibraryBlock ls
 
-          let finalLines = beforeLib ++ newLibBlock ++ [""] ++ dropLibraryBlock libBlockAndAfter
-          putStrLn "[DEBUG] Final package.yaml content (excerpt):"
-          mapM_ putStrLn (take 20 finalLines)
-          BS.writeFile "package.yaml" (BS8.pack (unlines finalLines))
-          putStrLn "[INFO] package.yaml updated."
+    dropLibraryBlock :: [String] -> [String]
+    dropLibraryBlock [] = []
+    dropLibraryBlock (_ : ls) = dropWhile (\s -> null s || (not (null s) && head s `elem` (" \t" :: String))) ls
+
+    extractDependencies :: [String] -> [String]
+    extractDependencies [] = []
+    extractDependencies (l : ls)
+      | "dependencies:" `isPrefixOf` dropSpaces l =
+          let deps = takeWhile (\s -> not (null s) && head s `elem` (" \t" :: String)) ls
+           in map (trim . dropDash) deps
+      | otherwise = extractDependencies ls
       where
-        updateXFieldFunc :: [String] -> String -> [String]
-        updateXFieldFunc [] _ = []
-        updateXFieldFunc (l : ls) newVal
-          | "x-tinfoiltiger:" `isPrefixOf` dropSpaces l = newVal : ls
-          | otherwise = l : updateXFieldFunc ls newVal
+        dropDash s = case dropWhile (== ' ') s of
+          ('-' : rest) -> trim rest
+          other -> trim other
 
-        isLibLine :: String -> Bool
-        isLibLine s = "library:" `isPrefixOf` dropSpaces s
+    nub :: (Eq a) => [a] -> [a]
+    nub [] = []
+    nub (x : xs) = x : nub (filter (/= x) xs)
 
-        -- isPrefixOf :: String -> String -> Bool
-        -- isPrefixOf prefix str = prefix == take (length prefix) str
+--------------------------------------------------------------------
+-- Upgrade files under lib/TinFoilTiger using the embedded template files.
 
-        dropSpaces :: String -> String
-        dropSpaces = dropWhile (`elem` (" \t" :: String))
+-- | Upgrade files under lib/TinFoilTiger using template-embedded files.
+-- | Upgrade files under lib/TinFoilTiger using template-embedded files.
+upgradeLibDir :: String -> IO ()
+upgradeLibDir tmpl = do
+  let baseDir = "lib/TinFoilTiger"
+      -- Construct the expected prefix based on the template name.
+      prefix = "templates/" ++ tmpl ++ "/lib/TinFoilTiger/"
+  exists <- doesDirectoryExist baseDir
+  if exists
+    then do
+      putStrLn $ "[INFO] Removing existing directory: " ++ baseDir
+      removeDirectoryRecursive baseDir
+    else return ()
+  -- Recreate the base directory.
+  createDirectoryIfMissing True baseDir
+  putStrLn $ "[DEBUG] Created directory: " ++ baseDir
 
-        extractLibraryBlock :: [String] -> [String]
-        extractLibraryBlock [] = []
-        extractLibraryBlock (l : ls)
-          | "library:" `isPrefixOf` dropSpaces l =
-              l : takeWhile (\s -> null s || (not (null s) && head s `elem` (" \t" :: String))) ls
-          | otherwise = extractLibraryBlock ls
+  -- Look up the embedded template files from TemplateMappings.
+  case Map.lookup tmpl TM.templateFilesMapping of
+    Nothing -> do
+      putStrLn $ "[ERROR] Template " ++ tmpl ++ " is not registered in templateFilesMapping."
+      exitFailure
+    Just files -> do
+      putStrLn $ "[DEBUG] Embedded template file keys for " ++ tmpl ++ ": " ++ show (map fst files)
+      let filesToUpgrade = filter (\(fp, _) -> prefix `isPrefixOf` fp) files
+      putStrLn $ "[DEBUG] Found " ++ show (length filesToUpgrade) ++ " file(s) with prefix \"" ++ prefix ++ "\"."
+      if null filesToUpgrade
+        then putStrLn $ "[WARN] No files with prefix " ++ prefix ++ " found in the embedded template files. Nothing to upgrade."
+        else mapM_ (writeEmbeddedFile baseDir prefix) filesToUpgrade
+      putStrLn "[INFO] Successfully updated lib/TinFoilTiger directory."
+  where
+    -- writeEmbeddedFile removes the expected prefix from each key and writes the file.
+    writeEmbeddedFile :: FilePath -> String -> (FilePath, BS.ByteString) -> IO ()
+    writeEmbeddedFile baseDir prefix (fp, content) = do
+      let relativePath = drop (length prefix) fp -- Remove the prefix so that e.g. "Utils/MonadManager.hs" remains.
+          targetPath = baseDir </> relativePath
+          destDir = takeDirectory targetPath
+      putStrLn $ "[DEBUG] Writing file: " ++ fp ++ " -> " ++ targetPath
+      createDirectoryIfMissing True destDir
+      BS.writeFile targetPath content
+      putStrLn $ "[INFO] Updated file: " ++ targetPath
 
-        dropLibraryBlock :: [String] -> [String]
-        dropLibraryBlock [] = []
-        dropLibraryBlock (_ : ls) = dropWhile (\s -> null s || (not (null s) && head s `elem` (" \t" :: String))) ls
+--------------------------------------------------------------------
+-- Get the embedded package.yaml file content from the TemplateMappings.
+-- We look for "package-ext.yaml" among the files for the given template.
+-- Get the embedded package.yaml file content from TemplateMappings.
+-- We look for "package.yaml" (as defined in each template’s TemplateFiles.hs)
+-- among the files for the given template.
 
-        extractDependencies :: [String] -> [String]
-        extractDependencies [] = []
-        extractDependencies (l : ls)
-          | "dependencies:" `isPrefixOf` dropSpaces l =
-              let deps = takeWhile (\s -> not (null s) && head s `elem` (" \t" :: String)) ls
-               in map (trim . dropDash) deps
-          | otherwise = extractDependencies ls
-          where
-            dropDash s = case dropWhile (== ' ') s of
-              ('-' : rest) -> trim rest
-              other -> trim other
-
-        nub :: (Eq a) => [a] -> [a]
-        nub [] = []
-        nub (x : xs) = x : nub (filter (/= x) xs)
-
-    ----------------------------------------------------------------
-    -- Upgrade files under lib/TinFoilTiger using embedded templates.
-    -- Now the list of template files will be discovered from disk.
-    upgradeLibDir :: String -> IO ()
-    upgradeLibDir tmpl = do
-      -- Remove the current installed library if it exists.
-      let baseDir = "lib/TinFoilTiger"
-      exists <- doesDirectoryExist baseDir
-      if exists
-        then do
-          putStrLn $ "[INFO] Removing existing directory: " ++ baseDir
-          removeDirectoryRecursive baseDir
-        else return ()
-
-      -- Assume that the embedded templates are stored on disk under:
-      --    templates/<TemplateName>/
-      let templatesPath = "templates" </> tmpl
-      templatesExist <- doesDirectoryExist templatesPath
-      if not templatesExist
-        then do
-          putStrLn $ "[ERROR] Template directory not found: " ++ templatesPath
-          exitFailure
-        else do
-          -- Recursively list all files in the template directory.
-          fileList <- listDirectoryRecursive templatesPath
-          -- In the previous version we only upgraded files in the "lib/TinFoilTiger/" subdirectory.
-          -- Here we mimic that logic by filtering for files that get installed into that folder.
-          let filesToUpgrade =
-                filter
-                  ( \(fp, _) ->
-                      let fp' = case stripPrefix (templatesPath ++ "/") fp of
-                            Just stripped -> stripped
-                            Nothing -> fp
-                       in "lib/TinFoilTiger/" `isPrefixOf` fp'
-                  )
-                  fileList
-          mapM_
-            ( \(fp, content) -> do
-                let targetPath = case stripPrefix (templatesPath ++ "/") fp of
-                      Just stripped -> stripped
-                      Nothing -> fp
-                    dir = takeDirectory targetPath
-                createDirectoryIfMissing True dir
-                BS.writeFile targetPath content
-                putStrLn $ "[INFO] Updated file: " ++ targetPath
-            )
-            filesToUpgrade
-          putStrLn "[INFO] Successfully updated lib/TinFoilTiger directory."
-
-    ----------------------------------------------------------------
-    -- A helper: recursively list directory files with their contents.
-    listDirectoryRecursive :: FilePath -> IO [(FilePath, BS.ByteString)]
-    listDirectoryRecursive topDir = do
-      contents <- listDirectory topDir
-      let properNames = filter (`notElem` [".", ".."]) contents
-      filesAndDirs <- forM properNames $ \name -> do
-        let fullPath = topDir </> name
-        isDir <- doesDirectoryExist fullPath
-        if isDir
-          then listDirectoryRecursive fullPath
-          else do
-            fileContent <- BS.readFile fullPath
-            return [(fullPath, fileContent)]
-      return (concat filesAndDirs)
-
-    ----------------------------------------------------------------
-    -- Get the embedded package.yaml file from disk.
-    -- Expects the file at "templates/<TemplateName>/package-ext.yaml"
-    getEmbeddedPackageYaml :: String -> IO BS.ByteString
-    getEmbeddedPackageYaml tmpl = do
-      let templatesBase = "templates"
-          pkgFile = templatesBase </> tmpl </> "package-ext.yaml"
-      exists <- doesFileExist pkgFile
-      if exists
-        then BS.readFile pkgFile
-        else do
-          putStrLn $ "Error: Template package file not found at " ++ pkgFile
-          exitFailure
-
-    ----------------------------------------------------------------
-    checkCurrentCodeVersion :: String -> IO Bool
-    checkCurrentCodeVersion currentVer = do
-      putStrLn "Checking for a newer version of current code remotely..."
-      let url = "https://files.ryangerardwilson.com/tinfoiltiger/debian/dists/stable/main/binary-amd64/Packages"
-      req <- parseRequest url
-      response <-
-        httpLBS req
-          `catch` ( \(e :: HttpException) -> do
-                      putStrLn ("Error fetching remote package info: " ++ show e)
-                      exitFailure
-                  )
-      let body = L8.lines (getResponseBody response)
-          trimmedBody = map (L8.pack . trim . L8.unpack) body
-          mVersionLine = find (L8.isPrefixOf "Version:") trimmedBody
-      case mVersionLine of
+-- | Get the embedded package.yaml file content from TemplateMappings.
+-- Instead of searching the embedDir mapping for "package.yaml", we now look up
+-- the package file from the new templateFilesMapping.
+getEmbeddedPackageYaml :: String -> IO BS.ByteString
+getEmbeddedPackageYaml tmpl =
+  case Map.lookup tmpl TM.templateFilesMapping of
+    Nothing -> do
+      putStrLn $ "Error: Template \"" ++ tmpl ++ "\" is not registered in the embedded templateFilesMapping."
+      exitFailure
+    Just files -> do
+      putStrLn $ "[DEBUG] TemplateFiles keys for template " ++ tmpl ++ ": " ++ show (map fst files)
+      case find (\(k, _) -> takeFileName k == "package.yaml") files of
+        Just (_, pkgYaml) -> do
+          putStrLn $ "[DEBUG] Found package.yaml for template " ++ tmpl ++ " in templateFilesMapping."
+          return pkgYaml
         Nothing -> do
-          putStrLn "Could not determine remote version for current code."
-          return False
-        Just verLine -> do
-          let remoteVerRaw = L8.unpack (L8.drop 8 verLine)
-              remoteVer = normalizeVersion (trim remoteVerRaw)
-          putStrLn $ "[DEBUG] Current code version: " ++ normalizeVersion currentVer
-          putStrLn $ "[DEBUG] Remote code version: " ++ remoteVer
-          return (compareVersions (normalizeVersion currentVer) remoteVer == LT)
+          putStrLn "Error: Template package file (package.yaml) not found in the embedded templateFilesMapping."
+          exitFailure
 
-    ----------------------------------------------------------------
-    checkRemoteVersion :: String -> IO ()
-    checkRemoteVersion projVersion = do
-      putStrLn $ "[INFO] (Stub) Performed remote version check for project version: " ++ projVersion
-      return ()
+--------------------------------------------------------------------
+-- Check for a newer version of the current code remotely.
+checkCurrentCodeVersion :: String -> IO Bool
+checkCurrentCodeVersion currentVer = do
+  putStrLn "Checking for a newer version of current code remotely..."
+  let url = "https://files.ryangerardwilson.com/tinfoiltiger/debian/dists/stable/main/binary-amd64/Packages"
+  req <- parseRequest url
+  response <-
+    httpLBS req
+      `catch` ( \(e :: HttpException) -> do
+                  putStrLn ("Error fetching remote package info: " ++ show e)
+                  exitFailure
+              )
+  let body = L8.lines (getResponseBody response)
+      trimmedBody = map (L8.pack . trim . L8.unpack) body
+      mVersionLine = find (L8.isPrefixOf "Version:") trimmedBody
+  case mVersionLine of
+    Nothing -> do
+      putStrLn "Could not determine remote version for current code."
+      return False
+    Just verLine -> do
+      let remoteVerRaw = L8.unpack (L8.drop 8 verLine)
+          remoteVer = normalizeVersion (trim remoteVerRaw)
+      putStrLn $ "[DEBUG] Current code version: " ++ normalizeVersion currentVer
+      putStrLn $ "[DEBUG] Remote code version: " ++ remoteVer
+      return (compareVersions (normalizeVersion currentVer) remoteVer == LT)
 
-    ----------------------------------------------------------------
-    normalizeVersion :: String -> String
-    normalizeVersion = map (\c -> if c == '-' then '.' else c)
+--------------------------------------------------------------------
+checkRemoteVersion :: String -> IO ()
+checkRemoteVersion projVersion = do
+  putStrLn $ "[INFO] (Stub) Performed remote version check for project version: " ++ projVersion
+  return ()
 
-    parseVersion :: String -> [Int]
-    parseVersion s = map read (wordsWhen (== '.') s)
+--------------------------------------------------------------------
+normalizeVersion :: String -> String
+normalizeVersion = map (\c -> if c == '-' then '.' else c)
 
-    wordsWhen :: (Char -> Bool) -> String -> [String]
-    wordsWhen p s =
-      case dropWhile p s of
-        "" -> []
-        s' -> let (w, s'') = break p s' in w : wordsWhen p s''
+parseVersion :: String -> [Int]
+parseVersion s = map read (wordsWhen (== '.') s)
 
-    compareVersions :: String -> String -> Ordering
-    compareVersions v1 v2 = compare (parseVersion v1) (parseVersion v2)
+wordsWhen :: (Char -> Bool) -> String -> [String]
+wordsWhen p s =
+  case dropWhile p s of
+    "" -> []
+    s' -> let (w, s'') = break p s' in w : wordsWhen p s''
 
-    trim :: String -> String
-    trim = reverse . dropWhile (== ' ') . reverse . dropWhile (== ' ')
+compareVersions :: String -> String -> Ordering
+compareVersions v1 v2 = compare (parseVersion v1) (parseVersion v2)
 
-    removeQuotes :: String -> String
-    removeQuotes s =
-      if length s >= 2 && head s == '"' && last s == '"'
-        then tail (init s)
-        else s
+trim :: String -> String
+trim = reverse . dropWhile (== ' ') . reverse . dropWhile (== ' ')
 
-    ----------------------------------------------------------------
-    -- Simple prefix helpers.
-    isPrefixOf :: String -> String -> Bool
-    isPrefixOf prefix str = prefix == take (length prefix) str
+removeQuotes :: String -> String
+removeQuotes s =
+  if length s >= 2 && head s == '"' && last s == '"'
+    then tail (init s)
+    else s
 
-    stripPrefix :: String -> String -> Maybe String
-    stripPrefix [] ys = Just ys
-    stripPrefix _ [] = Nothing
-    stripPrefix (x : xs) (y : ys)
-      | x == y = stripPrefix xs ys
-      | otherwise = Nothing
+--------------------------------------------------------------------
+-- Simple prefix helper.
+-- stripPrefix :: String -> String -> Maybe String
+-- stripPrefix [] ys = Just ys
+-- stripPrefix _ [] = Nothing
+-- stripPrefix (x : xs) (y : ys)
+--   | x == y = stripPrefix xs ys
+--   | otherwise = Nothing
+
+--------------------------------------------------------------------
+-- A helper: When condition is true, perform the given IO action.
+-- when :: Bool -> IO () -> IO ()
+-- when True action = action
+-- when False _ = return ()

@@ -20,8 +20,8 @@ def generate_scaffolder_hs_module(gathered_files, output_path, project_name):
                   "<ProjectName>.Scaffolder"
     """
 
-    module_name = f"{project_name}.Scaffolder"
-    templates_module_name = f"{project_name}.Templates"
+    module_name = f"Templates.{project_name}.Scaffolder"
+    templates_module_name = f"Templates.{project_name}.TemplateFiles"
 
     header = f"""{{-# LANGUAGE CPP #-}}
 module {module_name}

@@ -4,8 +4,9 @@ import sys
 import re
 import shutil
 import yaml
-from modules.generate_templates_hs_service import generate_templates_hs_module
+from modules.generate_template_files_hs_service import generate_template_files_hs_module
 from modules.generate_scaffolder_hs_service import generate_scaffolder_hs_module
+from modules.generate_template_mappings_hs_service import generate_template_mappings_hs_module
 
 
 def generate_lib_files_for_project(project_name, project_src_dir, parent_dir):
@@ -89,19 +90,22 @@ def generate_lib_files_for_project(project_name, project_src_dir, parent_dir):
         print(f"[WARNING] STEP I - No files found in {project_src_dir}.")
         return
 
-    project_lib_dir = os.path.join(parent_dir, "lib", project_name)
+    project_lib_dir = os.path.join(parent_dir, "lib/Templates", project_name)
     os.makedirs(project_lib_dir, exist_ok=True)
 
-    templates_hs_path = os.path.join(project_lib_dir, "Templates.hs")
+    templates_hs_path = os.path.join(project_lib_dir, "TemplateFiles.hs")
     scaffolder_hs_path = os.path.join(project_lib_dir, "Scaffolder.hs")
 
-    generate_templates_hs_module(all_files, templates_hs_path, project_name)
+    generate_template_files_hs_module(all_files, templates_hs_path, project_name)
     generate_scaffolder_hs_module(all_files, scaffolder_hs_path, project_name)
     print(f"[INFO] Finished processing project: {project_name}")
 
 
 def main():
     print("[INFO] Step I - Preprocessing")
+
+    # First, generate the TemplateMappings.hs module dynamically.
+    generate_template_mappings_hs_module()
 
     # Determine the script directory and the project root (parent directory).
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -112,7 +116,7 @@ def main():
     print("[DEBUG] Parent directory:", parent_dir)
 
     # Define the lib directory as a subdirectory of the parent directory.
-    lib_dir = os.path.join(parent_dir, "lib")
+    lib_dir = os.path.join(parent_dir, "lib/Templates")
     print("[DEBUG] Lib directory:", lib_dir)
 
     # Check if the lib directory exists.
@@ -149,7 +153,6 @@ def main():
     for project in projects:
         project_src_dir = os.path.join(templates_dir, project)
         generate_lib_files_for_project(project, project_src_dir, parent_dir)
-
 
     print("[INFO] Step I - Preprocessing complete")
 

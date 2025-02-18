@@ -1,5 +1,5 @@
 name:                tinfoiltiger
-version:             "0.0.53.1"
+version:             "0.0.57.1"
 github:              "ryangerardwilson/tinfoiltiger"
 license:             MIT
 author:              "Ryan Gerard Wilson"
@@ -46,6 +46,7 @@ library:
     - time
     - http-client
     - http-conduit
+    - containers
 
 executables:
   tinfoiltiger:

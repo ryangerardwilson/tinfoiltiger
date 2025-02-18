@@ -32,7 +32,14 @@ The above command will display a list of templates to choose from. You can then 
 
     tinfoiltiger --new <PROJECT_NAME> --template <TEMPLAE_NAME>
 
-## 5. License
+## 5. Upgrading Your TinFoilTiger Project
+
+TinFoilTiger scaffolds projects with a lib/TinFoilTiger directory. This way, when you run the below upgrade command, the contents of this directory will be replaced, leaving the rest of your project unaffected.
+
+    cd your/tinFoilTiger/project/root/dir
+    tinfoiltiger --upgrade
+
+## 6. License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 

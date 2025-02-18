@@ -6,7 +6,7 @@ import shutil
 import yaml
 
 
-def generate_templates_hs_module(file_paths, output_path, project_name):
+def generate_template_files_hs_module(file_paths, output_path, project_name):
     """
     file_paths: a list of tuples. Each tuple can have either:
        (path, comment) or (path, comment, file_content)
@@ -65,7 +65,7 @@ def generate_templates_hs_module(file_paths, output_path, project_name):
     header = (
         "{-# LANGUAGE TemplateHaskell #-}\n"
         "{-# LANGUAGE CPP #-}\n"
-        f"module {project_name}.Templates\n"
+        f"module Templates.{project_name}.TemplateFiles\n"
         "  ( "    # export list; we will list the individual variables and aggregated templates value.
     )
 

@@ -1,25 +1,25 @@
 {-# LANGUAGE CPP #-}
+module Templates.QuickStartUp.Scaffolder
+  ( scaffold
+  , writeFileWithInfo
+  , ensureDir
+  ) where
 
-module QuickStartUp.Scaffolder
-  ( scaffold,
-    writeFileWithInfo,
-    ensureDir,
-  )
-where
-
--- Note: we now import doesDirectoryExist and removeDirectoryRecursive.
-
-import Control.Monad (when)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
-import Data.List (isPrefixOf, stripPrefix)
-import Data.Time (getCurrentTime, utctDay)
-import Data.Time.Calendar (toGregorian)
-import QuickStartUp.Templates
-import System.Directory (createDirectoryIfMissing, doesDirectoryExist, removeDirectoryRecursive)
-import System.FilePath (takeBaseName, takeDirectory, (</>))
-import System.IO (hFlush, stdout)
-import System.Process (callCommand)
+-- Note: we now import doesDirectoryExist and removeDirectoryRecursive.
+import System.Directory ( createDirectoryIfMissing, doesDirectoryExist, removeDirectoryRecursive )
+import System.FilePath ((</>), takeDirectory, takeBaseName)
+import Control.Monad ( when )
+import System.Process ( callCommand )
+import System.IO (stdout, hFlush)
+import Data.List ( isPrefixOf )
+import Data.Time ( getCurrentTime, utctDay )
+import Data.Time.Calendar ( toGregorian )
+import Data.List (stripPrefix)
+
+
+import Templates.QuickStartUp.TemplateFiles
 
 -- | Update the package.yaml file with the values provided by the user.
 -- For lines starting with:
@@ -33,51 +33,39 @@ import System.Process (callCommand)
 --
 -- Finally, if any dependency line contains the token "YourApp",
 -- that token is replaced with the new app name.
-updatePackageYaml ::
-  BS.ByteString -> -- original package.yaml contents
-  String -> -- appName (project name, inferred)
-  String -> -- Author name
-  String -> -- Git remote URL
-  String -> -- Maintainer email
-  String -> -- Project description
-  String -> -- Current year
-  BS.ByteString -- updated package.yaml contents
+updatePackageYaml :: BS.ByteString  -- original package.yaml contents
+                  -> String         -- appName (project name, inferred)
+                  -> String         -- Author name
+                  -> String         -- Git remote URL
+                  -> String         -- Maintainer email
+                  -> String         -- Project description
+                  -> String         -- Current year
+                  -> BS.ByteString  -- updated package.yaml contents
 updatePackageYaml content appName author gitRemote maintainer description year =
   let s = BS8.unpack content
       ls = lines s
-      ls' =
-        map
-          ( \line ->
-              if "name:" `isPrefixOf` line
-                then "name:                " ++ appName
-                else
-                  if "author:" `isPrefixOf` line
-                    then "author:              \"" ++ author ++ "\""
-                    else
-                      if "maintainer:" `isPrefixOf` line
-                        then "maintainer:          \"" ++ maintainer ++ "\""
-                        else
-                          if "copyright:" `isPrefixOf` line
-                            then "copyright:           \"" ++ year ++ " " ++ author ++ "\""
-                            else
-                              if "github:" `isPrefixOf` line
-                                then "github:              \"" ++ gitRemote ++ "\""
-                                else
-                                  if "description:" `isPrefixOf` line
-                                    then "description:         " ++ description
-                                    else line
-          )
-          ls
-      ls'' =
-        map
-          ( \l ->
-              let trimmed = dropWhile (== ' ') l
-               in if trimmed == "- YourApp"
-                    then let prefix = takeWhile (== ' ') l in prefix ++ "- " ++ appName
-                    else l
-          )
-          ls'
-   in BS8.pack (unlines ls'')
+      ls' = map (\line ->
+                if "name:" `isPrefixOf` line
+                  then "name:                " ++ appName
+                else if "author:" `isPrefixOf` line
+                  then "author:              \"" ++ author ++ "\""
+                else if "maintainer:" `isPrefixOf` line
+                  then "maintainer:          \"" ++ maintainer ++ "\""
+                else if "copyright:" `isPrefixOf` line
+                  then "copyright:           \"" ++ year ++ " " ++ author ++ "\""
+                else if "github:" `isPrefixOf` line
+                  then "github:              \"" ++ gitRemote ++ "\""
+                else if "description:" `isPrefixOf` line
+                  then "description:         " ++ description
+                else line
+              ) ls
+      ls'' = map (\l ->
+                let trimmed = dropWhile (== ' ') l in
+                if trimmed == "- YourApp"
+                  then let prefix = takeWhile (== ' ') l in prefix ++ "- " ++ appName
+                  else l
+              ) ls'
+  in BS8.pack (unlines ls'')
 
 {-
   scaffold performs the following steps:
@@ -128,9 +116,10 @@ scaffold targetDir = do
   hFlush stdout
   projDescription <- getLine
 
+
   -- Get the current year.
   currentTime <- getCurrentTime
-  let (year, _, _) = toGregorian (utctDay currentTime)
+  let (year,_,_) = toGregorian (utctDay currentTime)
       currentYear = show year
 
   -- STEP II: Remove existing project directory if it exists.
@@ -145,36 +134,34 @@ scaffold targetDir = do
   putStrLn $ "[INFO] Running: " ++ stackNewCmd
   callCommand stackNewCmd
 
-  -- STEP III/IV: Overwrite generated project files with our custom templates.
+   -- STEP III/IV: Overwrite generated project files with our custom templates.
   -- Define a helper to strip the "templates/<appName>/" prefix.
   let stripTemplatePrefix rel =
         case stripPrefix ("templates/" ++ "QuickStartUp" ++ "/") rel of
           Just stripped -> stripped
-          Nothing -> rel
+          Nothing       -> rel
 
       fullPath sub = targetDir </> sub
 
       -- Use the aggregated list of templates from the qualified import.
-      fileTemplates = QuickStartUp.Templates.templates
+      fileTemplates = Templates.QuickStartUp.TemplateFiles.templates
 
-  mapM_
-    ( \(rel, fileData) -> do
-        putStrLn $ "[DEBUG] Original relative path: " ++ rel
-        let rel' = stripTemplatePrefix rel
-        putStrLn $ "[DEBUG] Stripped relative path: " ++ rel'
-        let dir = takeDirectory rel'
-        putStrLn $ "[DEBUG] Directory for file (from stripped path): " ++ dir
-        when (not (null dir)) $ do
-          putStrLn $ "[DEBUG] Ensuring directory exists: " ++ (fullPath dir)
-          ensureDir (fullPath dir)
-        let finalContent =
-              if rel' == "package.yaml"
-                then updatePackageYaml fileData appName author gitRemote maintainer projDescription currentYear
-                else fileData
-        putStrLn $ "[DEBUG] Writing file to: " ++ (fullPath rel')
-        writeFileWithInfo (fullPath rel') finalContent
-    )
-    fileTemplates
+  mapM_ (\(rel, fileData) -> do
+           putStrLn $ "[DEBUG] Original relative path: " ++ rel
+           let rel' = stripTemplatePrefix rel
+           putStrLn $ "[DEBUG] Stripped relative path: " ++ rel'
+           let dir = takeDirectory rel'
+           putStrLn $ "[DEBUG] Directory for file (from stripped path): " ++ dir
+           when (not (null dir)) $ do
+             putStrLn $ "[DEBUG] Ensuring directory exists: " ++ (fullPath dir)
+             ensureDir (fullPath dir)
+           let finalContent = if rel' == "package.yaml"
+                                then updatePackageYaml fileData appName author gitRemote maintainer projDescription currentYear
+                                else fileData
+           putStrLn $ "[DEBUG] Writing file to: " ++ (fullPath rel')
+           writeFileWithInfo (fullPath rel') finalContent
+        ) fileTemplates
+
 
   putStrLn "[INFO] tinfoiltiger - Scaffolding complete. You can now edit your files or compile."
 
@@ -187,3 +174,6 @@ writeFileWithInfo path content = do
 -- | Ensure that a directory exists.
 ensureDir :: FilePath -> IO ()
 ensureDir = createDirectoryIfMissing True
+
+
+    
