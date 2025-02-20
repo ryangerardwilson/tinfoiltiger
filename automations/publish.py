@@ -341,6 +341,8 @@ Components "main";
 ##################################################################################
 # PUBLISH INSTALL SCRIPT
 ##################################################################################
+
+
 def publish_install_script():
     install_sh_contents = """#!/bin/bash
 # This installation script configures the datasling repository and fixes chrome-sandbox permissions.
