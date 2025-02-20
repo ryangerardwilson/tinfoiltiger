@@ -1,4 +1,4 @@
 module TinFoilTiger.Env (version) where
 
 version :: String
-version = "0.0.77-1"
+version = "0.0.79-1"

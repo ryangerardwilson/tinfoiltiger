@@ -6,6 +6,7 @@ import shutil
 import json
 import re
 from packaging.version import parse as parse_version
+import tempfile
 
 
 MAJOR_RELEASE_NUMBER = 0
@@ -337,6 +338,64 @@ Components "main";
     delete_all_but_last_version_build_folders()
     delete_all_but_last_version_debs()
 
+##################################################################################
+# PUBLISH INSTALL SCRIPT
+##################################################################################
+def publish_install_script():
+    install_sh_contents = """#!/bin/bash
+# This installation script configures the datasling repository and fixes chrome-sandbox permissions.
+# Run with: bash -c "sh <(curl -fsSL https://files.ryangerardwilson.com/tinfoiltiger/install.sh)"
+set -e
+
+# Import apt repository key and save it to /usr/share/keyrings/tinfoiltiger.gpg
+curl -fsSL https://files.ryangerardwilson.com/tinfoiltiger/debian/pubkey.gpg | sudo gpg --dearmor -o /usr/share/keyrings/tinfoiltiger.gpg
+
+# Add datasling repository to your system sources list.
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/tinfoiltiger.gpg] https://files.ryangerardwilson.com/tinfoiltiger/debian stable main" | sudo tee /etc/apt/sources.list.d/tinfoiltiger.list
+
+# Update apt and install the datasling package.
+sudo apt update
+sudo apt-get install tinfoiltiger
+
+echo "Installation complete."
+"""
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as tmpfile:
+        tmpfile.write(install_sh_contents)
+        local_install_script = tmpfile.name
+
+    print("[INFO] Temporary install.sh written to:", local_install_script)
+
+    funcs_path = os.path.expanduser("~/.rgwfuncsrc")
+    if not os.path.exists(funcs_path):
+        raise FileNotFoundError(f"Cannot find config file: {funcs_path}")
+    with open(funcs_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    vm_presets = data.get("vm_presets", [])
+    preset = next((p for p in vm_presets if p.get("name") == "icdattcwsm"), None)
+    if not preset:
+        raise ValueError("No preset named 'icdattcwsm' found in ~/.rgwfuncsrc")
+    host = preset["host"]
+    ssh_user = preset["ssh_user"]
+    ssh_key_path = preset["ssh_key_path"]
+
+    remote_path = "/home/rgw/Apps/frontend-sites/files.ryangerardwilson.com/tinfoiltiger/install.sh"
+
+    rsync_cmd = (
+        f"rsync -avz -e 'ssh -i {ssh_key_path}' {local_install_script} {ssh_user}@{host}:{remote_path}"
+    )
+    print("[INFO] Running rsync command:")
+    print(rsync_cmd)
+    subprocess.check_call(rsync_cmd, shell=True)
+    print(f"[INFO] install.sh published to {remote_path}")
+
+    chmod_cmd = f"ssh -i {ssh_key_path} {ssh_user}@{host} 'chmod 644 {remote_path}'"
+    print("[INFO] Running remote chmod command:")
+    print(chmod_cmd)
+    subprocess.check_call(chmod_cmd, shell=True)
+    print("[INFO] Remote install.sh permissions updated to 644.")
+
+    os.remove(local_install_script)
+
 
 ################################################################################
 # MAIN
@@ -346,6 +405,7 @@ def main():
 
     new_version = get_new_version()
     publish_release(new_version)
+    publish_install_script()
     print()
 
 
