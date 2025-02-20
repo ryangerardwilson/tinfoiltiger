@@ -31,8 +31,8 @@ handleUpgrade = do
   pkgExists <- doesFileExist "package.yaml"
   if not pkgExists
     then do
-      putStrLn "Error: package.yaml not found in the current directory."
-      putStrLn "Please cd into your project directory."
+      putStrLn "[ERROR] package.yaml not found in the current directory."
+      putStrLn "[INFO] Please cd into your project directory."
       exitFailure
     else return ()
 
@@ -42,31 +42,31 @@ handleUpgrade = do
       maybeXField = find (BS8.isPrefixOf "x-tinfoiltiger:") pkgLines
   case maybeXField of
     Nothing -> do
-      putStrLn "No 'x-tinfoiltiger' field found in package.yaml."
-      putStrLn "Please cd into your project directory and set the value to something like \"TemplateName/get-latest\"."
+      putStrLn "[ERROR] No 'x-tinfoiltiger' field found in package.yaml."
+      putStrLn "[INFO] Please cd into your project directory and set the value to something like \"TemplateName/get-latest\"."
     Just line -> do
       let rawVal = BS8.drop (BS8.length "x-tinfoiltiger:") line
           projValueRaw = trim (BS8.unpack rawVal)
           projValue = removeQuotes projValueRaw
-      putStrLn $ "Found x-tinfoiltiger field in project package.yaml: " ++ projValue
+      putStrLn $ "[INFO] Found x-tinfoiltiger field in project package.yaml: " ++ projValue
       let (tmpl, rest) = break (== '/') projValue
       if null rest
-        then putStrLn "Error: The x-tinfoiltiger field is not in the expected format \"TemplateName/version\"."
+        then putStrLn "[ERROR] The x-tinfoiltiger field is not in the expected format \"TemplateName/version\"."
         else do
           let projVersion = drop 1 rest -- drop the '/'
           binaryPkg <- getEmbeddedPackageYaml tmpl
           let binLines = BS8.lines binaryPkg
               maybeBinField = find (BS8.isPrefixOf "x-tinfoiltiger:") binLines
           case maybeBinField of
-            Nothing -> putStrLn "Error: The embedded package.yaml does not have an x-tinfoiltiger field."
+            Nothing -> putStrLn "[ERROR] The embedded package.yaml does not have an x-tinfoiltiger field."
             Just binLine -> do
               let binRaw = BS8.drop (BS8.length "x-tinfoiltiger:") binLine
                   binValueRaw = trim (BS8.unpack binRaw)
                   binValue = removeQuotes binValueRaw
-              putStrLn $ "Template header version in embedded package.yaml: " ++ binValue
+              putStrLn $ "[INFO] Template header version in embedded package.yaml: " ++ binValue
               let (_, binRest) = break (== '/') binValue
               if null binRest
-                then putStrLn "Error: Embedded x-tinfoiltiger field is not in expected format."
+                then putStrLn "[ERROR] Embedded x-tinfoiltiger field is not in expected format."
                 else do
                   let binVersion = drop 1 binRest
                       currentCodeVer = normalizeVersion version
@@ -74,7 +74,7 @@ handleUpgrade = do
                   if newerCodeAvailable
                     then do
                       putStrLn "[INFO] A newer version of the current code is available."
-                      putStrLn "Please upgrade current code by running: "
+                      putStrLn "[INFO] Please upgrade current code by running: "
                       putStrLn "  sudo apt update; sudo apt install --only-upgrade tinfoiltiger; tinfoiltiger --upgrade"
                       exitFailure
                     else do
@@ -86,34 +86,47 @@ handleUpgrade = do
                       updateProjectPackageYaml binaryPkg newHeader
                       checkRemoteVersion projVersion
   where
-    --------------------------------------------------------------------------------
-    -- Nested helper: updateProjectPackageYaml
     updateProjectPackageYaml :: BS.ByteString -> String -> IO ()
     updateProjectPackageYaml embeddedPkgBs newXField = do
-      putStrLn "[INFO] Updating project package.yaml..."
+      -- putStrLn "[DEBUG] Starting updateProjectPackageYaml..."
       pkgExists <- doesFileExist "package.yaml"
       if not pkgExists
-        then putStrLn "Error: package.yaml not found." >> exitFailure
+        then putStrLn "[ERROR] package.yaml not found." >> exitFailure
         else do
           currContent <- BS.readFile "package.yaml"
           let currLines = lines (BS8.unpack currContent)
-              updatedXLines = updateXFieldFunc currLines newXField
-              (beforeLib, libBlockAndAfter) = break isLibLine updatedXLines
-              currentLibBlock = if null libBlockAndAfter then [] else extractLibraryBlock libBlockAndAfter
-              localDeps = extractDependencies currentLibBlock
-          putStrLn "[DEBUG] Current library block from package.yaml:"
-          mapM_ putStrLn currentLibBlock
-          putStrLn $ "[DEBUG] Extracted local dependencies: " ++ show localDeps
+          -- putStrLn "[DEBUG] Original package.yaml lines:"
+          -- mapM_ putStrLn currLines
+
+          -- Use newXField passed as parameter
+          let updatedXLines = updateXFieldFunc currLines newXField
+          -- putStrLn "[DEBUG] package.yaml after updating x-tinfoiltiger field:"
+          -- mapM_ putStrLn updatedXLines
+
+          let (beforeLib, libBlockAndAfter) = break isLibLine updatedXLines
+          -- putStrLn "[DEBUG] Lines before library block:"
+          -- mapM_ putStrLn beforeLib
+
+          let currentLibBlock = if null libBlockAndAfter then [] else extractLibraryBlock libBlockAndAfter
+          -- putStrLn "[DEBUG] Current library block from package.yaml:"
+          -- mapM_ putStrLn currentLibBlock
+
+          let localDeps = extractDependencies currentLibBlock
+          -- putStrLn $ "[DEBUG] Extracted local dependencies: " ++ show localDeps
 
           let embeddedLines = lines (BS8.unpack embeddedPkgBs)
-              embeddedLibBlock = extractLibraryBlock embeddedLines
-              embeddedDeps = extractDependencies embeddedLibBlock
-          putStrLn "[DEBUG] Embedded library block from embedded package.yaml:"
-          mapM_ putStrLn embeddedLibBlock
-          putStrLn $ "[DEBUG] Extracted embedded dependencies: " ++ show embeddedDeps
+          -- putStrLn "[DEBUG] Embedded package.yaml lines:"
+          -- mapM_ putStrLn embeddedLines
+
+          let embeddedLibBlock = extractLibraryBlock embeddedLines
+          -- putStrLn "[DEBUG] Embedded library block from package.yaml:"
+          -- mapM_ putStrLn embeddedLibBlock
+
+          let embeddedDeps = extractDependencies embeddedLibBlock
+          -- putStrLn $ "[DEBUG] Extracted embedded dependencies: " ++ show embeddedDeps
 
           let mergedDeps = nub (localDeps ++ embeddedDeps)
-          putStrLn $ "[DEBUG] Merged dependency list: " ++ show mergedDeps
+          -- putStrLn $ "[DEBUG] Merged dependency list: " ++ show mergedDeps
 
           let newLibBlock =
                 [ "library:",
@@ -121,12 +134,13 @@ handleUpgrade = do
                   "  dependencies:"
                 ]
                   ++ map (\d -> "    - " ++ d) mergedDeps
-          putStrLn "[DEBUG] New library block to be inserted:"
-          mapM_ putStrLn newLibBlock
+          -- putStrLn "[DEBUG] New library block to be inserted:"
+          -- mapM_ putStrLn newLibBlock
 
           let finalLines = beforeLib ++ newLibBlock ++ [""] ++ dropLibraryBlock libBlockAndAfter
-          putStrLn "[DEBUG] Final package.yaml content (excerpt):"
-          mapM_ putStrLn (take 20 finalLines)
+          -- putStrLn "[DEBUG] Final package.yaml content (excerpt):"
+          -- mapM_ putStrLn (take 20 finalLines)
+
           BS.writeFile "package.yaml" (BS8.pack (unlines finalLines))
           putStrLn "[INFO] package.yaml updated."
       where
@@ -182,15 +196,15 @@ handleUpgrade = do
           removeDirectoryRecursive baseDir
         else return ()
       createDirectoryIfMissing True baseDir
-      putStrLn $ "[DEBUG] Created directory: " ++ baseDir
+      -- putStrLn $ "[DEBUG] Created directory: " ++ baseDir
       case Map.lookup tmpl TM.templateFilesMapping of
         Nothing -> do
           putStrLn $ "[ERROR] Template " ++ tmpl ++ " is not registered in templateFilesMapping."
           exitFailure
         Just files -> do
-          putStrLn $ "[DEBUG] Embedded template file keys for " ++ tmpl ++ ": " ++ show (map fst files)
+          -- putStrLn $ "[DEBUG] Embedded template file keys for " ++ tmpl ++ ": " ++ show (map fst files)
           let filesToUpgrade = filter (\(fp, _) -> prefix `isPrefixOf` fp) files
-          putStrLn $ "[DEBUG] Found " ++ show (length filesToUpgrade) ++ " file(s) with prefix \"" ++ prefix ++ "\"."
+          -- putStrLn $ "[DEBUG] Found " ++ show (length filesToUpgrade) ++ " file(s) with prefix \"" ++ prefix ++ "\"."
           if null filesToUpgrade
             then putStrLn $ "[WARN] No files with prefix " ++ prefix ++ " found in the embedded template files. Nothing to upgrade."
             else mapM_ (writeEmbeddedFile baseDir prefix) filesToUpgrade
@@ -201,7 +215,7 @@ handleUpgrade = do
           let relativePath = drop (length prefix) fp
               targetPath = baseDir </> relativePath
               destDir = takeDirectory targetPath
-          putStrLn $ "[DEBUG] Writing file: " ++ fp ++ " -> " ++ targetPath
+          -- putStrLn $ "[DEBUG] Writing file: " ++ fp ++ " -> " ++ targetPath
           createDirectoryIfMissing True destDir
           BS.writeFile targetPath content
           putStrLn $ "[INFO] Updated file: " ++ targetPath
@@ -212,29 +226,29 @@ handleUpgrade = do
     getEmbeddedPackageYaml tmpl =
       case Map.lookup tmpl TM.templateFilesMapping of
         Nothing -> do
-          putStrLn $ "Error: Template \"" ++ tmpl ++ "\" is not registered in the embedded templateFilesMapping."
+          putStrLn $ "[ERROR] Template \"" ++ tmpl ++ "\" is not registered in the embedded templateFilesMapping."
           exitFailure
         Just files -> do
-          putStrLn $ "[DEBUG] TemplateFiles keys for template " ++ tmpl ++ ": " ++ show (map fst files)
+          -- putStrLn $ "[DEBUG] TemplateFiles keys for template " ++ tmpl ++ ": " ++ show (map fst files)
           case find (\(k, _) -> takeFileName k == "package.yaml") files of
             Just (_, pkgYaml) -> do
-              putStrLn $ "[DEBUG] Found package.yaml for template " ++ tmpl ++ " in templateFilesMapping."
+              -- putStrLn $ "[DEBUG] Found package.yaml for template " ++ tmpl ++ " in templateFilesMapping."
               return pkgYaml
             Nothing -> do
-              putStrLn "Error: Template package file (package.yaml) not found in the embedded templateFilesMapping."
+              putStrLn "[ERROR] Template package file (package.yaml) not found in the embedded templateFilesMapping."
               exitFailure
 
     --------------------------------------------------------------------------------
     -- Nested helper: checkCurrentCodeVersion.
     checkCurrentCodeVersion :: String -> IO Bool
     checkCurrentCodeVersion currentVer = do
-      putStrLn "Checking for a newer version of current code remotely..."
+      putStrLn "[INFO] Checking for a newer version of current code remotely..."
       let url = "https://files.ryangerardwilson.com/tinfoiltiger/debian/dists/stable/main/binary-amd64/Packages"
       req <- parseRequest url
       response <-
         httpLBS req
           `catch` ( \(e :: HttpException) -> do
-                      putStrLn ("Error fetching remote package info: " ++ show e)
+                      putStrLn ("[ERROR] Error fetching remote package info: " ++ show e)
                       exitFailure
                   )
       let body = L8.lines (getResponseBody response)
@@ -242,20 +256,20 @@ handleUpgrade = do
           mVersionLine = find (L8.isPrefixOf "Version:") trimmedBody
       case mVersionLine of
         Nothing -> do
-          putStrLn "Could not determine remote version for current code."
+          putStrLn "[INFO] Could not determine remote version for current code."
           return False
         Just verLine -> do
           let remoteVerRaw = L8.unpack (L8.drop 8 verLine)
               remoteVer = normalizeVersion (trim remoteVerRaw)
-          putStrLn $ "[DEBUG] Current code version: " ++ normalizeVersion currentVer
-          putStrLn $ "[DEBUG] Remote code version: " ++ remoteVer
+          -- putStrLn $ "[DEBUG] Current code version: " ++ normalizeVersion currentVer
+          -- putStrLn $ "[DEBUG] Remote code version: " ++ remoteVer
           return (compareVersions (normalizeVersion currentVer) remoteVer == LT)
 
     --------------------------------------------------------------------------------
     -- Nested helper: checkRemoteVersion.
     checkRemoteVersion :: String -> IO ()
-    checkRemoteVersion projVersion = do
-      putStrLn $ "[INFO] (Stub) Performed remote version check for project version: " ++ projVersion
+    checkRemoteVersion _ = do
+      -- putStrLn $ "[INFO] Performed remote version check for project version: " ++ projVersion
       return ()
 
     --------------------------------------------------------------------------------

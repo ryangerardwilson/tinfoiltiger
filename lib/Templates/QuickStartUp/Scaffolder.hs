@@ -159,19 +159,19 @@ scaffold targetDir = do
 
   mapM_
     ( \(rel, fileData) -> do
-        putStrLn $ "[DEBUG] Original relative path: " ++ rel
+        -- putStrLn $ "[DEBUG] Original relative path: " ++ rel
         let rel' = stripTemplatePrefix rel
-        putStrLn $ "[DEBUG] Stripped relative path: " ++ rel'
+        -- putStrLn $ "[DEBUG] Stripped relative path: " ++ rel'
         let dir = takeDirectory rel'
-        putStrLn $ "[DEBUG] Directory for file (from stripped path): " ++ dir
+        -- putStrLn $ "[DEBUG] Directory for file (from stripped path): " ++ dir
         when (not (null dir)) $ do
-          putStrLn $ "[DEBUG] Ensuring directory exists: " ++ (fullPath dir)
+          -- putStrLn $ "[DEBUG] Ensuring directory exists: " ++ (fullPath dir)
           ensureDir (fullPath dir)
         let finalContent =
               if rel' == "package.yaml"
                 then updatePackageYaml fileData appName author gitRemote maintainer projDescription currentYear
                 else fileData
-        putStrLn $ "[DEBUG] Writing file to: " ++ (fullPath rel')
+        -- putStrLn $ "[DEBUG] Writing file to: " ++ (fullPath rel')
         writeFileWithInfo (fullPath rel') finalContent
     )
     fileTemplates

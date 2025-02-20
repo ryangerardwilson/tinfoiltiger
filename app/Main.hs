@@ -17,7 +17,7 @@ main = do
 
   putStrLn logo
 
-  -- let version = "0.0.59-1"
+  -- let version = "0.0.61-1"
   putStrLn $ "Version: " ++ version
 
   -- Get command-line arguments.

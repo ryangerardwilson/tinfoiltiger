@@ -5,7 +5,7 @@ license:             MIT
 author:              "Author name here"
 maintainer:          "example@example.com"
 copyright:           "2025 Author name here"
-x-tinfoiltiger:      "QuickStartUp/0.0.53.1"
+x-tinfoiltiger:      "QuickStartUp/0.0.77.1"
 
 extra-source-files:
 - README.md

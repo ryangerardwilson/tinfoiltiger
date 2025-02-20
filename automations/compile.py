@@ -112,12 +112,12 @@ def main():
     parent_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
 
     # CLEAR ALL DIRECTORIES IN THE LIB DIR OF THE PARENT
-    print("[DEBUG] Script directory:", script_dir)
-    print("[DEBUG] Parent directory:", parent_dir)
+    # print("[DEBUG] Script directory:", script_dir)
+    # print("[DEBUG] Parent directory:", parent_dir)
 
     # Define the lib directory as a subdirectory of the parent directory.
     lib_dir = os.path.join(parent_dir, "lib/Templates")
-    print("[DEBUG] Lib directory:", lib_dir)
+    # print("[DEBUG] Lib directory:", lib_dir)
 
     # Check if the lib directory exists.
     if os.path.exists(lib_dir):
@@ -133,7 +133,7 @@ def main():
                     print(f"[ERROR] Could not remove {item_path}: {e}")
         print("[INFO] All directories in 'lib' have been cleared.")
     else:
-        print(f"[WARNING] 'lib' directory not found at {lib_dir}")
+        print(f"[INFO] 'lib' directory not found at {lib_dir}")
 
     # Since compile.py is running from automations, the templates directory resides at the project root.
     templates_dir = os.path.join(parent_dir, "templates")

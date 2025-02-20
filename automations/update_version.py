@@ -230,34 +230,35 @@ def get_new_version_number(MAJOR_RELEASE_NUMBER=None):
     return new_version_str
 
 
-def replace_version(main_hs_path, package_yaml_path, new_version):
+def replace_version(lib_env_hs_path, package_yaml_path, new_version):
     """
     Replaces version strings in both the Haskell source file and package.yaml file with new_version.
 
-    For main_hs_path, it assumes a version line like:
-         let version = "2.0.26-1"
+    For lib_env_hs_path, it assumes a version line like:
+         version = "0.0.61-1"
     For package_yaml_path, it assumes a version line like:
          version: "0.1.0.0"
     and replaces it so that the new version is always quoted.
 
-    In particular, if new_version is "2.0.27-1", then main.hs gets "2.0.27-1"
+    In particular, if new_version is "2.0.27-1", then the Haskell file gets "2.0.27-1"
     while package.yaml gets "2.0.27.1".
     """
 
     # --- Update the Haskell source file ---
-    with open(main_hs_path, 'r', encoding='utf-8') as f:
+    with open(lib_env_hs_path, 'r', encoding='utf-8') as f:
         main_content = f.read()
 
-    # Regular expression for Haskell version definition:
-    hs_pattern = r'(let\s+version\s*=\s*")[^"]*(")'
+    # Regular expression for Haskell version definition.
+    # Matches lines like:    version = "0.0.61-1"
+    hs_pattern = r'^(version\s*=\s*")[^"]*(")'
+    new_main_content = re.sub(hs_pattern,
+                              lambda match: match.group(1) + new_version + match.group(2),
+                              main_content,
+                              flags=re.MULTILINE)
 
-    def hs_replacer(match):
-        return match.group(1) + new_version + match.group(2)
-    new_main_content = re.sub(hs_pattern, hs_replacer, main_content)
-
-    with open(main_hs_path, 'w', encoding='utf-8') as f:
+    with open(lib_env_hs_path, 'w', encoding='utf-8') as f:
         f.write(new_main_content)
-    print(f"[INFO] Replaced version with {new_version} in {main_hs_path}")
+    print(f"[INFO] Replaced version with {new_version} in {lib_env_hs_path}")
 
     # --- Convert new_version for package.yaml ---
     # Replace hyphens with dots for package.yaml
@@ -267,19 +268,114 @@ def replace_version(main_hs_path, package_yaml_path, new_version):
     with open(package_yaml_path, 'r', encoding='utf-8') as f:
         pkg_content = f.read()
 
-    # Regular expression for YAML version field at the beginning of a line.
-    # It will match versions with or without quotes.
+    # Regular expression for the YAML version field at the beginning of a line.
+    # It matches lines like:    version: "0.1.0.0"
     pkg_pattern = r'^(version:\s*)["\']?([^"\n]+)["\']?'
-
-    def pkg_replacer(match):
-        # Always force double quotes around the new version.
-        return match.group(1) + '"' + pkg_new_version + '"'
-
-    new_pkg_content = re.sub(pkg_pattern, pkg_replacer, pkg_content, flags=re.MULTILINE)
+    new_pkg_content = re.sub(pkg_pattern,
+                             lambda match: match.group(1) + '"' + pkg_new_version + '"',
+                             pkg_content,
+                             flags=re.MULTILINE)
 
     with open(package_yaml_path, 'w', encoding='utf-8') as f:
         f.write(new_pkg_content)
     print(f"[INFO] Replaced version with {pkg_new_version} in {package_yaml_path}")
+
+
+def replace_version_in_template_package_yaml_and_env_files(new_version):
+    """
+    For each project in the templates directory (templates/{PROJECT_NAME}),
+    update:
+     1. The package.yaml file:
+         Replace the x-tinfoiltiger line so that it becomes:
+         x-tinfoiltiger:      "{PROJECT_NAME}/{VERSION}"
+         where {VERSION} is taken from new_version with hyphens replaced by dots.
+     2. The lib/TinFoilTiger/Env.hs file:
+         Replace the version definition line so that the new version is:
+         version = "{new_version}"
+    """
+    # Prepare version for package.yaml (convert hyphens to dots)
+    pkg_version = new_version.replace("-", ".")
+
+    # Determine the templates directory; assume it's a sibling of where your script is located.
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
+    templates_dir = os.path.join(parent_dir, "templates")
+
+    # print(f"[DEBUG] Looking for template projects in: {templates_dir}")
+    if not os.path.isdir(templates_dir):
+        print(f"[WARNING] The templates directory {templates_dir} does not exist. Skipping template file updates.")
+        return
+
+    # Process each project under templates.
+    for project_name in os.listdir(templates_dir):
+        project_dir = os.path.join(templates_dir, project_name)
+        if not os.path.isdir(project_dir):
+            continue
+
+        print(f"[INFO] Processing project: {project_name}")
+
+        # ---------- Update package.yaml ----------
+        package_yaml_path = os.path.join(project_dir, "package.yaml")
+        if os.path.isfile(package_yaml_path):
+            print(f"[INFO] Updating package.yaml for project: {project_name}")
+            try:
+                with open(package_yaml_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+            except Exception as e:
+                print(f"[ERROR] Could not read {package_yaml_path}: {e}")
+                continue
+
+            # Regular expression to match the line starting with x-tinfoiltiger: (ignoring leading spaces)
+            pattern = r'^(x-tinfoiltiger:\s*)["\']?[^"\n]+["\']?'
+            new_field_line = f'x-tinfoiltiger:      "{project_name}/{pkg_version}"'
+            new_content, n_subs = re.subn(pattern, new_field_line, content, flags=re.MULTILINE)
+
+            if n_subs == 0:
+                print(f"[WARNING] No x-tinfoiltiger field found in {package_yaml_path}.")
+            else:
+                # print(f"[DEBUG] Replacing x-tinfoiltiger field in {package_yaml_path} with: {new_field_line}")
+                try:
+                    with open(package_yaml_path, 'w', encoding='utf-8') as f:
+                        f.write(new_content)
+                    print(f"[INFO] Updated {package_yaml_path}")
+                except Exception as e:
+                    print(f"[ERROR] Could not write {package_yaml_path}: {e}")
+        else:
+            print(f"[ERROR] package.yaml not found for project '{project_name}' in {project_dir}")
+
+        # ---------- Update lib/TinFoilTiger/Env.hs ----------
+        env_hs_path = os.path.join(project_dir, "lib", "TinFoilTiger", "Env.hs")
+        if os.path.isfile(env_hs_path):
+            print(f"[INFO] Updating Env.hs for project: {project_name}")
+            try:
+                with open(env_hs_path, 'r', encoding='utf-8') as f:
+                    env_content = f.read()
+            except Exception as e:
+                print(f"[ERROR] Could not read {env_hs_path}: {e}")
+                continue
+
+            # Regular expression to match the version line:
+            # expecting a line like:  version = "0.0.53-1"
+            hs_pattern = r'^(version\s*=\s*")[^"]*(")'
+            new_env_content, subs = re.subn(
+                hs_pattern,
+                lambda m: m.group(1) + new_version + m.group(2),
+                env_content,
+                flags=re.MULTILINE
+            )
+
+            if subs == 0:
+                print(f"[WARNING] Could not find version definition in {env_hs_path}.")
+            else:
+                print(f"[INFO] Replacing version in {env_hs_path} with: {new_version}")
+                try:
+                    with open(env_hs_path, 'w', encoding='utf-8') as f:
+                        f.write(new_env_content)
+                    print(f"[INFO] Updated {env_hs_path}")
+                except Exception as e:
+                    print(f"[ERROR] Could not write {env_hs_path}: {e}")
+        else:
+            print(f"[ERROR] Env.hs not found for project '{project_name}' in {os.path.join(project_dir, 'lib', 'TinFoilTiger')}")
 
 
 def main():
@@ -287,10 +383,12 @@ def main():
     current_version, new_version = get_versions()
     script_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
-    main_hs_path = os.path.join(parent_dir, 'app/Main.hs')
+    lib_env_hs_path = os.path.join(parent_dir, 'lib/Env.hs')
     package_yaml_path = os.path.join(parent_dir, 'package.yaml')
 
-    replace_version(main_hs_path, package_yaml_path, new_version)
+    replace_version(lib_env_hs_path, package_yaml_path, new_version)
+    # replace_version_in_template_package_yaml_files(new_version)
+    replace_version_in_template_package_yaml_and_env_files(new_version)
 
 
 if __name__ == "__main__":

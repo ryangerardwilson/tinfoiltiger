@@ -14,10 +14,8 @@ import Data.FileEmbed (embedDir)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 -- Import the scaffolder modules from your templates.
-import qualified Templates.QuickGtk.Scaffolder
--- Import the TemplateFiles modules from your templates.
-import qualified Templates.QuickGtk.TemplateFiles
 import qualified Templates.QuickStartUp.Scaffolder
+-- Import the TemplateFiles modules from your templates.
 import qualified Templates.QuickStartUp.TemplateFiles
 
 -- | A mapping from template name to its embedded (source) files.
@@ -25,8 +23,7 @@ import qualified Templates.QuickStartUp.TemplateFiles
 templateMappings :: Map String [(FilePath, BS.ByteString)]
 templateMappings =
   Map.fromList
-    [ ("QuickGtk", $(embedDir "lib/Templates/QuickGtk")),
-      ("QuickStartUp", $(embedDir "lib/Templates/QuickStartUp"))
+    [ ("QuickStartUp", $(embedDir "lib/Templates/QuickStartUp"))
     ]
 
 -- | Lookup helper to find a template’s embedded files.
@@ -37,8 +34,7 @@ templateMappingsLookup = flip Map.lookup templateMappings
 scaffolderMappings :: Map String (FilePath -> IO ())
 scaffolderMappings =
   Map.fromList
-    [ ("QuickGtk", Templates.QuickGtk.Scaffolder.scaffold),
-      ("QuickStartUp", Templates.QuickStartUp.Scaffolder.scaffold)
+    [ ("QuickStartUp", Templates.QuickStartUp.Scaffolder.scaffold)
     ]
 
 -- | A mapping for template-specific files exported from each TemplateFiles module.
@@ -46,6 +42,5 @@ scaffolderMappings =
 templateFilesMapping :: Map String [(FilePath, BS.ByteString)]
 templateFilesMapping =
   Map.fromList
-    [ ("QuickGtk", Templates.QuickGtk.TemplateFiles.templates),
-      ("QuickStartUp", Templates.QuickStartUp.TemplateFiles.templates)
+    [ ("QuickStartUp", Templates.QuickStartUp.TemplateFiles.templates)
     ]

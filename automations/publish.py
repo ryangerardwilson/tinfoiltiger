@@ -331,7 +331,6 @@ Components "main";
             print(f"[INFO] STEP III - Deleting deb file: {full_path}")
             os.remove(full_path)
 
-    # version = get_new_version_number(MAJOR_RELEASE_NUMBER)
     build_deb(version)
     prepare_deb_for_distribution(version)
     push_to_server()
